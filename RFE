@@ -33,6 +33,7 @@ silhouette_scores = []
 davies_bouldin_scores = []
 weighted_silhouette_scores = []
 feature_counts = []
+selected_features_dict = {}  # Dictionary to store selected features for each step
 
 # Range of features to keep in each iteration
 num_features_range = range(1, X_reduced.shape[1] + 1)
@@ -44,6 +45,10 @@ for num_features in num_features_range:
     selector = RFE(model, n_features_to_select=num_features)
     X_selected = selector.fit_transform(X_scaled, np.zeros(X_scaled.shape[0]))  # Dummy target for RFE
 
+    # Store the selected features for this iteration
+    selected_features = X_reduced.columns[selector.support_].tolist()
+    selected_features_dict[num_features] = selected_features
+    
     # Apply KMeans clustering with the current feature subset
     kmeans = KMeans(n_clusters=3, random_state=0)
     labels = kmeans.fit_predict(X_selected)
@@ -77,3 +82,7 @@ plt.title("Feature Selection with Correlation-Based Reduction and RFE")
 plt.legend()
 plt.grid(True)
 plt.show()
+
+# Display the selected features for each step
+for num_features, features in selected_features_dict.items():
+    print(f"{num_features} Features Selected: {features}")
