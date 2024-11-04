@@ -1,53 +1,79 @@
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.feature_selection import RFE
+from sklearn.preprocessing import StandardScaler
 
-# Example dataset
-# X = your data
+# Generate or load your dataset
+# Replace this with your actual data
+np.random.seed(0)
+X = pd.DataFrame(np.random.rand(100, 46), columns=[f"feature_{i}" for i in range(46)])
 
-# Parameters
-n_clusters = 3  # Set optimal number of clusters
-initial_feature_count = X.shape[1]
+# Step 1: Correlation-Based Feature Removal
+def correlation_feature_reduction(data, threshold=0.9):
+    corr_matrix = data.corr().abs()
+    upper_triangle = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    to_drop = [column for column in upper_triangle.columns if any(upper_triangle[column] > threshold)]
+    reduced_data = data.drop(columns=to_drop)
+    return reduced_data
+
+# Apply correlation-based feature removal
+X_reduced = correlation_feature_reduction(X, threshold=0.9)
+
+# Step 2: Wrapper Feature Selection using RFE with Clustering Evaluation
+# Scaling features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_reduced)
+
+# Initialize lists to store evaluation metrics
 silhouette_scores = []
+davies_bouldin_scores = []
+weighted_silhouette_scores = []
 feature_counts = []
 
-# Start with all features
-remaining_features = list(range(initial_feature_count))
-best_score = -1  # Initialize best score
+# Range of features to keep in each iteration
+num_features_range = range(1, X_reduced.shape[1] + 1)
 
-# Iterate to reduce features one by one
-while len(remaining_features) > 1:
-    current_scores = []
-    
-    # Evaluate removing each feature
-    for feature in remaining_features:
-        # Temporary subset excluding one feature
-        selected_features = [f for f in remaining_features if f != feature]
-        X_temp = X[:, selected_features]
-        
-        # Perform clustering
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(X_temp)
-        score = silhouette_score(X_temp, kmeans.labels_)
-        current_scores.append((score, feature))
-    
-    # Find the best feature to remove
-    current_scores.sort(reverse=True)  # Sort by silhouette score descending
-    best_score, feature_to_remove = current_scores.pop()  # Feature with lowest impact on score
-    
-    # Remove the least important feature
-    remaining_features.remove(feature_to_remove)
-    
-    # Save the score and feature count for plotting
-    silhouette_scores.append(best_score)
-    feature_counts.append(len(remaining_features))
+# Recursive Feature Elimination with KMeans clustering evaluation
+for num_features in num_features_range:
+    # Apply RFE with Logistic Regression (as a placeholder classifier for the wrapper approach)
+    model = LogisticRegression(max_iter=1000)
+    selector = RFE(model, n_features_to_select=num_features)
+    X_selected = selector.fit_transform(X_scaled, np.zeros(X_scaled.shape[0]))  # Dummy target for RFE
 
-# Plotting Number of Features vs Silhouette Score
-plt.figure(figsize=(10, 6))
-plt.plot(feature_counts, silhouette_scores, marker='o')
+    # Apply KMeans clustering with the current feature subset
+    kmeans = KMeans(n_clusters=3, random_state=0)
+    labels = kmeans.fit_predict(X_selected)
+    
+    # Calculate Silhouette Score and Davies-Bouldin Index
+    silhouette = silhouette_score(X_selected, labels)
+    dbi = davies_bouldin_score(X_selected, labels)
+    
+    # Calculate Weighted Silhouette Score
+    unique_labels, counts = np.unique(labels, return_counts=True)
+    weights = 1 / counts  # Inverse of cluster sizes
+    cluster_silhouettes = [
+        silhouette_score(X_selected[labels == label], [label] * counts[i]) for i, label in enumerate(unique_labels)
+    ]
+    weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
+
+    # Store scores
+    silhouette_scores.append(silhouette)
+    davies_bouldin_scores.append(dbi)
+    weighted_silhouette_scores.append(weighted_silhouette)
+    feature_counts.append(num_features)
+
+# Plot the results
+plt.figure(figsize=(12, 6))
+plt.plot(feature_counts, silhouette_scores, marker='o', label="Silhouette Score")
+plt.plot(feature_counts, davies_bouldin_scores, marker='s', label="Davies-Bouldin Index")
+plt.plot(feature_counts, weighted_silhouette_scores, marker='^', label="Weighted Silhouette Score")
 plt.xlabel("Number of Features Selected")
-plt.ylabel("Silhouette Score")
-plt.title("Wrapper Approach: Number of Features vs Silhouette Score")
+plt.ylabel("Score")
+plt.title("Feature Selection with Correlation-Based Reduction and RFE")
+plt.legend()
 plt.grid(True)
 plt.show()
