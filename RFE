@@ -1,0 +1,65 @@
+import numpy as np
+import pandas as pd
+from sklearn.feature_selection import RFE
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.neural_network import MLPRegressor
+from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
+
+# Example dataset
+# X = your data
+
+# Define clustering model for RFE
+estimator = KMeans(n_clusters=3, random_state=42)
+
+# Define range of feature counts to evaluate
+feature_range = range(1, X.shape[1] + 1, 2)  # Test feature counts
+silhouette_scores = []
+wcss_scores = []
+reconstruction_errors = []
+
+# Loop over different numbers of features
+for n_features in feature_range:
+    rfe = RFE(estimator, n_features_to_select=n_features)
+    X_rfe = rfe.fit_transform(X)
+    
+    # 1. Silhouette Score
+    labels = estimator.fit_predict(X_rfe)
+    silhouette_scores.append(silhouette_score(X_rfe, labels))
+    
+    # 2. Within-Cluster Sum of Squares (WCSS)
+    wcss_scores.append(estimator.inertia_)
+    
+    # 3. Reconstruction Error (for autoencoder-based feature selection)
+    autoencoder = MLPRegressor(hidden_layer_sizes=(n_features,), max_iter=100, random_state=42)
+    autoencoder.fit(X_rfe, X_rfe)
+    reconstructed = autoencoder.predict(X_rfe)
+    reconstruction_errors.append(mean_squared_error(X_rfe, reconstructed))
+
+# Plotting each metric against the number of features
+plt.figure(figsize=(14, 8))
+
+# Silhouette Score
+plt.subplot(2, 2, 1)
+plt.plot(feature_range, silhouette_scores, marker='o')
+plt.xlabel("Number of Features Selected")
+plt.ylabel("Silhouette Score")
+plt.title("Silhouette Score vs Number of Features")
+
+# WCSS
+plt.subplot(2, 2, 2)
+plt.plot(feature_range, wcss_scores, marker='o', color='orange')
+plt.xlabel("Number of Features Selected")
+plt.ylabel("Within-Cluster Sum of Squares (WCSS)")
+plt.title("WCSS vs Number of Features")
+
+# Reconstruction Error
+plt.subplot(2, 2, 3)
+plt.plot(feature_range, reconstruction_errors, marker='o', color='green')
+plt.xlabel("Number of Features Selected")
+plt.ylabel("Reconstruction Error")
+plt.title("Reconstruction Error vs Number of Features")
+
+plt.tight_layout()
+plt.show()
