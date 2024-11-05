@@ -1,0 +1,8 @@
+from copkmeans.cop_kmeans import cop_kmeans
+
+# Define constraints for each cluster size
+lower_bound = int(0.75 * len(X))
+upper_bound = int(0.6 * len(X))
+
+# Run COP-KMeans with constraints
+cop_kmeans_clusters, _ = cop_kmeans(X[selected_features], n_clusters, ml=[], cl=[], lower_bound=lower_bound, upper_bound=upper_bound)
