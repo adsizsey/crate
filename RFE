@@ -6,6 +6,7 @@ from scipy.spatial.distance import squareform
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score, davies_bouldin_score
+import warnings
 
 # Generate or load your dataset
 np.random.seed(0)
@@ -66,15 +67,24 @@ for threshold in thresholds:
             weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
 
             # Store results for plotting
-            feature_counts.append(len(selected_features))
             silhouette_scores.append(silhouette)
             davies_bouldin_scores.append(dbi)
             weighted_silhouette_scores.append(weighted_silhouette)
         else:
-            # Skip if all labels are the same
-            print(f"Skipping threshold {threshold}: All data points were assigned to a single cluster.")
+            # Store NaN if all labels are the same, indicating a failed clustering attempt
+            silhouette_scores.append(np.nan)
+            davies_bouldin_scores.append(np.nan)
+            weighted_silhouette_scores.append(np.nan)
+            print(f"Skipping metric calculation for threshold {threshold}: Single cluster.")
     else:
+        # Store NaN if there are too few features selected for clustering
+        silhouette_scores.append(np.nan)
+        davies_bouldin_scores.append(np.nan)
+        weighted_silhouette_scores.append(np.nan)
         print(f"Skipping threshold {threshold}: Too few features selected for clustering.")
+    
+    # Store the feature count for each threshold, even if metrics are NaN
+    feature_counts.append(len(selected_features))
 
 # Plot the clustering performance metrics as a function of the number of selected features
 plt.figure(figsize=(12, 6))
