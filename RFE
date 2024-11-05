@@ -1,88 +1,45 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, davies_bouldin_score
-from sklearn.linear_model import LogisticRegression
-from sklearn.feature_selection import RFE
-from sklearn.preprocessing import StandardScaler
+from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
+from scipy.spatial.distance import squareform
 
 # Generate or load your dataset
-# Replace this with your actual data
 np.random.seed(0)
 X = pd.DataFrame(np.random.rand(100, 46), columns=[f"feature_{i}" for i in range(46)])
 
-# Step 1: Correlation-Based Feature Removal
-def correlation_feature_reduction(data, threshold=0.9):
-    corr_matrix = data.corr().abs()
-    upper_triangle = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-    to_drop = [column for column in upper_triangle.columns if any(upper_triangle[column] > threshold)]
-    reduced_data = data.drop(columns=to_drop)
-    return reduced_data
+# Compute the correlation matrix and convert to distance
+corr_matrix = X.corr().abs()
+distance_matrix = 1 - corr_matrix
 
-# Apply correlation-based feature removal
-X_reduced = correlation_feature_reduction(X, threshold=0.9)
+# Perform hierarchical clustering based on the distance matrix
+linked = linkage(squareform(distance_matrix), method='average')
 
-# Step 2: Wrapper Feature Selection using RFE with Clustering Evaluation
-# Scaling features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_reduced)
-
-# Initialize lists to store evaluation metrics
-silhouette_scores = []
-davies_bouldin_scores = []
-weighted_silhouette_scores = []
-feature_counts = []
-selected_features_dict = {}  # Dictionary to store selected features for each step
-
-# Range of features to keep in each iteration
-num_features_range = range(1, X_reduced.shape[1] + 1)
-
-# Recursive Feature Elimination with KMeans clustering evaluation
-for num_features in num_features_range:
-    # Apply RFE with Logistic Regression (as a placeholder classifier for the wrapper approach)
-    model = LogisticRegression(max_iter=1000)
-    selector = RFE(model, n_features_to_select=num_features)
-    X_selected = selector.fit_transform(X_scaled, np.zeros(X_scaled.shape[0]))  # Dummy target for RFE
-
-    # Store the selected features for this iteration
-    selected_features = X_reduced.columns[selector.support_].tolist()
-    selected_features_dict[num_features] = selected_features
-    
-    # Apply KMeans clustering with the current feature subset
-    kmeans = KMeans(n_clusters=3, random_state=0)
-    labels = kmeans.fit_predict(X_selected)
-    
-    # Calculate Silhouette Score and Davies-Bouldin Index
-    silhouette = silhouette_score(X_selected, labels)
-    dbi = davies_bouldin_score(X_selected, labels)
-    
-    # Calculate Weighted Silhouette Score
-    unique_labels, counts = np.unique(labels, return_counts=True)
-    weights = 1 / counts  # Inverse of cluster sizes
-    cluster_silhouettes = [
-        silhouette_score(X_selected[labels == label], [label] * counts[i]) for i, label in enumerate(unique_labels)
-    ]
-    weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
-
-    # Store scores
-    silhouette_scores.append(silhouette)
-    davies_bouldin_scores.append(dbi)
-    weighted_silhouette_scores.append(weighted_silhouette)
-    feature_counts.append(num_features)
-
-# Plot the results
-plt.figure(figsize=(12, 6))
-plt.plot(feature_counts, silhouette_scores, marker='o', label="Silhouette Score")
-plt.plot(feature_counts, davies_bouldin_scores, marker='s', label="Davies-Bouldin Index")
-plt.plot(feature_counts, weighted_silhouette_scores, marker='^', label="Weighted Silhouette Score")
-plt.xlabel("Number of Features Selected")
-plt.ylabel("Score")
-plt.title("Feature Selection with Correlation-Based Reduction and RFE")
-plt.legend()
-plt.grid(True)
+# Plot the dendrogram
+plt.figure(figsize=(10, 6))
+dendrogram(linked, labels=X.columns, leaf_rotation=90)
+plt.title("Dendrogram of Feature Clustering")
+plt.xlabel("Features")
+plt.ylabel("Distance (1 - Correlation)")
 plt.show()
 
-# Display the selected features for each step
-for num_features, features in selected_features_dict.items():
-    print(f"{num_features} Features Selected: {features}")
+# Track feature counts at various thresholds
+thresholds = np.linspace(0.6, 0.95, 8)  # Example thresholds for correlation
+feature_counts = []
+
+for threshold in thresholds:
+    clusters = fcluster(linked, threshold, criterion='distance')
+    selected_features = []
+    for cluster_id in np.unique(clusters):
+        cluster_features = X.columns[clusters == cluster_id]
+        selected_features.append(cluster_features[0])  # Pick one feature per cluster
+    feature_counts.append(len(selected_features))
+
+# Plot the number of features retained at each threshold level
+plt.figure(figsize=(8, 5))
+plt.plot(thresholds, feature_counts, marker='o')
+plt.title("Number of Features Retained at Different Correlation Thresholds")
+plt.xlabel("Correlation Threshold")
+plt.ylabel("Number of Features Retained")
+plt.grid(True)
+plt.show()
