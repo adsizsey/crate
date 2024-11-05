@@ -1,8 +1,5 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, davies_bouldin_score
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.optimizers import Adam
@@ -23,10 +20,10 @@ encoding_dim = 10  # Dimensionality of latent space
 # Define the encoder
 input_layer = Input(shape=(input_dim,))
 encoder = Dense(32, activation="relu")(input_layer)
-encoder = Dense(encoding_dim, activation="relu")(encoder)
+encoder_output = Dense(encoding_dim, activation="relu")(encoder)
 
 # Define the decoder
-decoder = Dense(32, activation="relu")(encoder)
+decoder = Dense(32, activation="relu")(encoder_output)
 decoder = Dense(input_dim, activation="linear")(decoder)
 
 # Compile the autoencoder model
@@ -36,26 +33,22 @@ autoencoder.compile(optimizer=Adam(), loss='mse')
 # Train the autoencoder
 autoencoder.fit(X_scaled, X_scaled, epochs=50, batch_size=10, verbose=1)
 
-# Extract latent features
-encoder_model = Model(inputs=input_layer, outputs=encoder)
-X_latent = encoder_model.predict(X_scaled)
+# Extract weights from the encoder layer
+encoder_model = Model(inputs=input_layer, outputs=encoder_output)
+encoder_weights = encoder_model.layers[1].get_weights()[0]  # Get weights of first encoder layer
 
-# Perform clustering on the latent space
-kmeans = KMeans(n_clusters=3, random_state=0)
-labels = kmeans.fit_predict(X_latent)
+# Find top contributing features for each latent dimension
+n_top_features = 5  # Number of top features to select per latent dimension
+selected_features = set()
 
-# Evaluate clustering performance
-silhouette = silhouette_score(X_latent, labels)
-davies_bouldin = davies_bouldin_score(X_latent, labels)
+for latent_idx in range(encoding_dim):
+    # Get absolute weights for the current latent feature
+    feature_weights = np.abs(encoder_weights[:, latent_idx])
+    # Get indices of top features based on weight magnitude
+    top_feature_indices = np.argsort(feature_weights)[-n_top_features:]
+    # Add feature names to the selected set
+    selected_features.update(X.columns[top_feature_indices])
 
-# Print the clustering metrics
-print(f"Silhouette Score: {silhouette}")
-print(f"Davies-Bouldin Index: {davies_bouldin}")
-
-# Optional: Visualize latent features
-plt.scatter(X_latent[:, 0], X_latent[:, 1], c=labels, cmap='viridis')
-plt.title("Clustering on Latent Features from Autoencoder")
-plt.xlabel("Latent Feature 1")
-plt.ylabel("Latent Feature 2")
-plt.colorbar(label='Cluster Label')
-plt.show()
+# Convert selected features to a sorted list
+selected_features = sorted(selected_features)
+print("Selected Features:", selected_features)
