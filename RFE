@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
 from scipy.spatial.distance import squareform
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score, davies_bouldin_score
 
 # Generate or load your dataset
 np.random.seed(0)
@@ -23,23 +26,56 @@ plt.xlabel("Features")
 plt.ylabel("Distance (1 - Correlation)")
 plt.show()
 
-# Track feature counts at various thresholds
+# Track feature counts and clustering metrics at various thresholds
 thresholds = np.linspace(0.6, 0.95, 8)  # Example thresholds for correlation
 feature_counts = []
+silhouette_scores = []
+davies_bouldin_scores = []
+weighted_silhouette_scores = []
 
 for threshold in thresholds:
+    # Perform clustering of features based on the current threshold
     clusters = fcluster(linked, threshold, criterion='distance')
     selected_features = []
     for cluster_id in np.unique(clusters):
         cluster_features = X.columns[clusters == cluster_id]
         selected_features.append(cluster_features[0])  # Pick one feature per cluster
-    feature_counts.append(len(selected_features))
+    X_reduced = X[selected_features]
+    
+    # Scale the reduced feature set for clustering
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_reduced)
+    
+    # Apply KMeans clustering on the selected features
+    kmeans = KMeans(n_clusters=3, random_state=0)
+    labels = kmeans.fit_predict(X_scaled)
 
-# Plot the number of features retained at each threshold level
-plt.figure(figsize=(8, 5))
-plt.plot(thresholds, feature_counts, marker='o')
-plt.title("Number of Features Retained at Different Correlation Thresholds")
-plt.xlabel("Correlation Threshold")
-plt.ylabel("Number of Features Retained")
+    # Calculate clustering metrics
+    silhouette = silhouette_score(X_scaled, labels)
+    dbi = davies_bouldin_score(X_scaled, labels)
+    
+    # Calculate Weighted Silhouette Score
+    unique_labels, counts = np.unique(labels, return_counts=True)
+    weights = 1 / counts
+    cluster_silhouettes = [
+        silhouette_score(X_scaled[labels == label], [label] * counts[i]) for i, label in enumerate(unique_labels)
+    ]
+    weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
+
+    # Store results for plotting
+    feature_counts.append(len(selected_features))
+    silhouette_scores.append(silhouette)
+    davies_bouldin_scores.append(dbi)
+    weighted_silhouette_scores.append(weighted_silhouette)
+
+# Plot the clustering performance metrics as a function of the number of selected features
+plt.figure(figsize=(12, 6))
+plt.plot(feature_counts, silhouette_scores, marker='o', label="Silhouette Score")
+plt.plot(feature_counts, davies_bouldin_scores, marker='s', label="Davies-Bouldin Index")
+plt.plot(feature_counts, weighted_silhouette_scores, marker='^', label="Weighted Silhouette Score")
+plt.xlabel("Number of Features Selected")
+plt.ylabel("Score")
+plt.title("Clustering Performance at Different Feature Counts")
+plt.legend()
 plt.grid(True)
 plt.show()
