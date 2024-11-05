@@ -1,9 +1,13 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.regularizers import l1
 from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 
 # Generate or load your dataset
 np.random.seed(0)
@@ -13,42 +17,91 @@ X = pd.DataFrame(np.random.rand(100, 46), columns=[f"feature_{i}" for i in range
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# Autoencoder architecture
-input_dim = X_scaled.shape[1]
+# Hyperparameters
 encoding_dim = 10  # Dimensionality of latent space
+l1_strength = 0.001  # Regularization strength
+n_clusters = 3  # Number of clusters
+max_no_improvement_steps = 3  # Early stopping threshold
+feature_reduction_ratio = 0.9  # Reduce features by 10% each step
 
-# Define the encoder
-input_layer = Input(shape=(input_dim,))
-encoder = Dense(32, activation="relu")(input_layer)
-encoder_output = Dense(encoding_dim, activation="relu")(encoder)
+# Track metrics and selected features
+stepwise_ss = []
+stepwise_wcss = []
+selected_features_stepwise = []
 
-# Define the decoder
-decoder = Dense(32, activation="relu")(encoder_output)
-decoder = Dense(input_dim, activation="linear")(decoder)
+# Initial set of features
+remaining_features = list(X.columns)
 
-# Compile the autoencoder model
-autoencoder = Model(inputs=input_layer, outputs=decoder)
-autoencoder.compile(optimizer=Adam(), loss='mse')
+no_improvement_steps = 0
+best_ss = -1
 
-# Train the autoencoder
-autoencoder.fit(X_scaled, X_scaled, epochs=50, batch_size=10, verbose=1)
+while len(remaining_features) > 1:
+    # Define the encoder with L1 regularization
+    input_layer = Input(shape=(len(remaining_features),))
+    encoder = Dense(32, activation="relu", activity_regularizer=l1(l1_strength))(input_layer)
+    encoder_output = Dense(encoding_dim, activation="relu")(encoder)
 
-# Extract weights from the encoder layer
-encoder_model = Model(inputs=input_layer, outputs=encoder_output)
-encoder_weights = encoder_model.layers[1].get_weights()[0]  # Get weights of first encoder layer
+    # Define the decoder
+    decoder = Dense(32, activation="relu")(encoder_output)
+    decoder = Dense(len(remaining_features), activation="linear")(decoder)
 
-# Find top contributing features for each latent dimension
-n_top_features = 5  # Number of top features to select per latent dimension
-selected_features = set()
+    # Compile the autoencoder model
+    autoencoder = Model(inputs=input_layer, outputs=decoder)
+    autoencoder.compile(optimizer=Adam(), loss='mse')
 
-for latent_idx in range(encoding_dim):
-    # Get absolute weights for the current latent feature
-    feature_weights = np.abs(encoder_weights[:, latent_idx])
-    # Get indices of top features based on weight magnitude
-    top_feature_indices = np.argsort(feature_weights)[-n_top_features:]
-    # Add feature names to the selected set
-    selected_features.update(X.columns[top_feature_indices])
+    # Train the autoencoder on the current subset of features
+    X_subset = X[remaining_features]
+    X_subset_scaled = scaler.fit_transform(X_subset)
+    autoencoder.fit(X_subset_scaled, X_subset_scaled, epochs=50, batch_size=10, verbose=0)
 
-# Convert selected features to a sorted list
-selected_features = sorted(selected_features)
-print("Selected Features:", selected_features)
+    # Extract encoder weights and determine the top features to retain
+    encoder_weights = autoencoder.layers[1].get_weights()[0]
+    feature_importance = np.sum(np.abs(encoder_weights), axis=1)
+    top_feature_indices = np.argsort(feature_importance)[-int(len(remaining_features) * feature_reduction_ratio):]
+    selected_features = [remaining_features[i] for i in top_feature_indices]
+    selected_features_stepwise.append(selected_features)
+
+    # Update the remaining features list
+    remaining_features = selected_features
+
+    # Clustering on the selected features
+    X_selected_scaled = scaler.fit_transform(X[selected_features])
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+    labels = kmeans.fit_predict(X_selected_scaled)
+
+    # Calculate Silhouette Score and WCSS
+    if len(np.unique(labels)) > 1:
+        ss = silhouette_score(X_selected_scaled, labels)
+        wcss = kmeans.inertia_
+
+        # Track metrics
+        stepwise_ss.append(ss)
+        stepwise_wcss.append(wcss)
+
+        # Early stopping logic
+        if ss > best_ss:
+            best_ss = ss
+            no_improvement_steps = 0
+        else:
+            no_improvement_steps += 1
+            if no_improvement_steps >= max_no_improvement_steps:
+                break
+    else:
+        # Break if clustering fails
+        print("Only one cluster formed; stopping.")
+        break
+
+# Plot Silhouette Score and WCSS over feature reduction steps
+plt.figure(figsize=(12, 6))
+plt.plot(range(len(stepwise_ss)), stepwise_ss, marker='o', label="Silhouette Score")
+plt.plot(range(len(stepwise_wcss)), stepwise_wcss, marker='s', label="WCSS (Inertia)")
+plt.xlabel("Feature Reduction Steps")
+plt.ylabel("Score")
+plt.legend()
+plt.title("Clustering Quality over Stepwise Feature Reduction")
+plt.grid(True)
+plt.show()
+
+# Print the final set of selected features for each step
+for i, features in enumerate(selected_features_stepwise):
+    print(f"Step {i+1}: Selected Features ({len(features)}) - {features}")
