@@ -1,99 +1,61 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
-from scipy.spatial.distance import squareform
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score, davies_bouldin_score
-import warnings
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense
+from tensorflow.keras.optimizers import Adam
+from sklearn.preprocessing import StandardScaler
 
 # Generate or load your dataset
 np.random.seed(0)
 X = pd.DataFrame(np.random.rand(100, 46), columns=[f"feature_{i}" for i in range(46)])
 
-# Compute the correlation matrix and convert to distance
-corr_matrix = X.corr().abs()
-distance_matrix = 1 - corr_matrix
+# Scale the dataset
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-# Perform hierarchical clustering based on the distance matrix
-linked = linkage(squareform(distance_matrix), method='average')
+# Autoencoder architecture
+input_dim = X_scaled.shape[1]
+encoding_dim = 10  # Dimensionality of latent space
 
-# Plot the dendrogram
-plt.figure(figsize=(10, 6))
-dendrogram(linked, labels=X.columns, leaf_rotation=90)
-plt.title("Dendrogram of Feature Clustering")
-plt.xlabel("Features")
-plt.ylabel("Distance (1 - Correlation)")
-plt.show()
+# Define the encoder
+input_layer = Input(shape=(input_dim,))
+encoder = Dense(32, activation="relu")(input_layer)
+encoder = Dense(encoding_dim, activation="relu")(encoder)
 
-# Track feature counts and clustering metrics at various thresholds
-thresholds = np.linspace(0.6, 0.95, 8)  # Example thresholds for correlation
-feature_counts = []
-silhouette_scores = []
-davies_bouldin_scores = []
-weighted_silhouette_scores = []
+# Define the decoder
+decoder = Dense(32, activation="relu")(encoder)
+decoder = Dense(input_dim, activation="linear")(decoder)
 
-for threshold in thresholds:
-    # Perform clustering of features based on the current threshold
-    clusters = fcluster(linked, threshold, criterion='distance')
-    selected_features = []
-    for cluster_id in np.unique(clusters):
-        cluster_features = X.columns[clusters == cluster_id]
-        selected_features.append(cluster_features[0])  # Pick one feature per cluster
-    X_reduced = X[selected_features]
-    
-    # Only proceed with clustering if more than 1 feature is selected
-    if len(selected_features) > 1:
-        # Scale the reduced feature set for clustering
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_reduced)
-        
-        # Apply KMeans clustering on the selected features
-        kmeans = KMeans(n_clusters=3, random_state=0)
-        labels = kmeans.fit_predict(X_scaled)
+# Compile the autoencoder model
+autoencoder = Model(inputs=input_layer, outputs=decoder)
+autoencoder.compile(optimizer=Adam(), loss='mse')
 
-        # Calculate clustering metrics if there is more than one unique label
-        if len(np.unique(labels)) > 1:
-            silhouette = silhouette_score(X_scaled, labels)
-            dbi = davies_bouldin_score(X_scaled, labels)
-            
-            # Calculate Weighted Silhouette Score
-            unique_labels, counts = np.unique(labels, return_counts=True)
-            weights = 1 / counts
-            cluster_silhouettes = [
-                silhouette_score(X_scaled[labels == label], [label] * counts[i]) for i, label in enumerate(unique_labels)
-            ]
-            weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
+# Train the autoencoder
+autoencoder.fit(X_scaled, X_scaled, epochs=50, batch_size=10, verbose=1)
 
-            # Store results for plotting
-            silhouette_scores.append(silhouette)
-            davies_bouldin_scores.append(dbi)
-            weighted_silhouette_scores.append(weighted_silhouette)
-        else:
-            # Store NaN if all labels are the same, indicating a failed clustering attempt
-            silhouette_scores.append(np.nan)
-            davies_bouldin_scores.append(np.nan)
-            weighted_silhouette_scores.append(np.nan)
-            print(f"Skipping metric calculation for threshold {threshold}: Single cluster.")
-    else:
-        # Store NaN if there are too few features selected for clustering
-        silhouette_scores.append(np.nan)
-        davies_bouldin_scores.append(np.nan)
-        weighted_silhouette_scores.append(np.nan)
-        print(f"Skipping threshold {threshold}: Too few features selected for clustering.")
-    
-    # Store the feature count for each threshold, even if metrics are NaN
-    feature_counts.append(len(selected_features))
+# Extract latent features
+encoder_model = Model(inputs=input_layer, outputs=encoder)
+X_latent = encoder_model.predict(X_scaled)
 
-# Plot the clustering performance metrics as a function of the number of selected features
-plt.figure(figsize=(12, 6))
-plt.plot(feature_counts, silhouette_scores, marker='o', label="Silhouette Score")
-plt.plot(feature_counts, davies_bouldin_scores, marker='s', label="Davies-Bouldin Index")
-plt.plot(feature_counts, weighted_silhouette_scores, marker='^', label="Weighted Silhouette Score")
-plt.xlabel("Number of Features Selected")
-plt.ylabel("Score")
-plt.title("Clustering Performance at Different Feature Counts")
-plt.legend()
-plt.grid(True)
+# Perform clustering on the latent space
+kmeans = KMeans(n_clusters=3, random_state=0)
+labels = kmeans.fit_predict(X_latent)
+
+# Evaluate clustering performance
+silhouette = silhouette_score(X_latent, labels)
+davies_bouldin = davies_bouldin_score(X_latent, labels)
+
+# Print the clustering metrics
+print(f"Silhouette Score: {silhouette}")
+print(f"Davies-Bouldin Index: {davies_bouldin}")
+
+# Optional: Visualize latent features
+plt.scatter(X_latent[:, 0], X_latent[:, 1], c=labels, cmap='viridis')
+plt.title("Clustering on Latent Features from Autoencoder")
+plt.xlabel("Latent Feature 1")
+plt.ylabel("Latent Feature 2")
+plt.colorbar(label='Cluster Label')
 plt.show()
