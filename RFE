@@ -42,31 +42,39 @@ for threshold in thresholds:
         selected_features.append(cluster_features[0])  # Pick one feature per cluster
     X_reduced = X[selected_features]
     
-    # Scale the reduced feature set for clustering
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_reduced)
-    
-    # Apply KMeans clustering on the selected features
-    kmeans = KMeans(n_clusters=3, random_state=0)
-    labels = kmeans.fit_predict(X_scaled)
+    # Only proceed with clustering if more than 1 feature is selected
+    if len(selected_features) > 1:
+        # Scale the reduced feature set for clustering
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_reduced)
+        
+        # Apply KMeans clustering on the selected features
+        kmeans = KMeans(n_clusters=3, random_state=0)
+        labels = kmeans.fit_predict(X_scaled)
 
-    # Calculate clustering metrics
-    silhouette = silhouette_score(X_scaled, labels)
-    dbi = davies_bouldin_score(X_scaled, labels)
-    
-    # Calculate Weighted Silhouette Score
-    unique_labels, counts = np.unique(labels, return_counts=True)
-    weights = 1 / counts
-    cluster_silhouettes = [
-        silhouette_score(X_scaled[labels == label], [label] * counts[i]) for i, label in enumerate(unique_labels)
-    ]
-    weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
+        # Calculate clustering metrics if there is more than one unique label
+        if len(np.unique(labels)) > 1:
+            silhouette = silhouette_score(X_scaled, labels)
+            dbi = davies_bouldin_score(X_scaled, labels)
+            
+            # Calculate Weighted Silhouette Score
+            unique_labels, counts = np.unique(labels, return_counts=True)
+            weights = 1 / counts
+            cluster_silhouettes = [
+                silhouette_score(X_scaled[labels == label], [label] * counts[i]) for i, label in enumerate(unique_labels)
+            ]
+            weighted_silhouette = np.sum(weights * cluster_silhouettes) / np.sum(weights)
 
-    # Store results for plotting
-    feature_counts.append(len(selected_features))
-    silhouette_scores.append(silhouette)
-    davies_bouldin_scores.append(dbi)
-    weighted_silhouette_scores.append(weighted_silhouette)
+            # Store results for plotting
+            feature_counts.append(len(selected_features))
+            silhouette_scores.append(silhouette)
+            davies_bouldin_scores.append(dbi)
+            weighted_silhouette_scores.append(weighted_silhouette)
+        else:
+            # Skip if all labels are the same
+            print(f"Skipping threshold {threshold}: All data points were assigned to a single cluster.")
+    else:
+        print(f"Skipping threshold {threshold}: Too few features selected for clustering.")
 
 # Plot the clustering performance metrics as a function of the number of selected features
 plt.figure(figsize=(12, 6))
