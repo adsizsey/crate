@@ -1,8 +1,56 @@
-from copkmeans.cop_kmeans import cop_kmeans
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin_min
 
-# Define constraints for each cluster size
-lower_bound = int(0.75 * len(X))
-upper_bound = int(0.6 * len(X))
+def constrained_kmeans(X, n_clusters, max_size_ratio=0.6, min_size_ratio=0.0075, max_iter=10):
+    # Initialize KMeans
+    kmeans = KMeans(n_clusters=n_clusters, n_init=10)
+    labels = kmeans.fit_predict(X)
+    centroids = kmeans.cluster_centers_
+    
+    # Define size constraints
+    max_size = int(max_size_ratio * len(X))
+    min_size = int(min_size_ratio * len(X))
+    
+    for iteration in range(max_iter):
+        # Count points in each cluster
+        cluster_sizes = np.bincount(labels, minlength=n_clusters)
+        
+        # Identify clusters that violate the size constraints
+        oversized_clusters = np.where(cluster_sizes > max_size)[0]
+        undersized_clusters = np.where(cluster_sizes < min_size)[0]
 
-# Run COP-KMeans with constraints
-cop_kmeans_clusters, _ = cop_kmeans(X[selected_features], n_clusters, ml=[], cl=[], lower_bound=lower_bound, upper_bound=upper_bound)
+        if not oversized_clusters.size and not undersized_clusters.size:
+            # All clusters satisfy size constraints
+            break
+        
+        # Reassign points from oversized clusters
+        for cluster in oversized_clusters:
+            # Get points in the oversized cluster
+            cluster_points = np.where(labels == cluster)[0]
+            _, distances = pairwise_distances_argmin_min(X[cluster_points], centroids)
+            farthest_points = cluster_points[np.argsort(-distances)[:cluster_sizes[cluster] - max_size]]
+            
+            # Reassign farthest points to nearest smaller clusters
+            for point_idx in farthest_points:
+                nearest_cluster = np.argmin([np.linalg.norm(X[point_idx] - c) for i, c in enumerate(centroids) if i != cluster])
+                labels[point_idx] = nearest_cluster
+
+        # Refill undersized clusters if necessary
+        for cluster in undersized_clusters:
+            # Get points closest to the undersized cluster's centroid
+            unassigned_points = np.where(labels != cluster)[0]
+            nearest_points = unassigned_points[np.argsort([np.linalg.norm(X[idx] - centroids[cluster]) for idx in unassigned_points])[:min_size - cluster_sizes[cluster]]]
+            labels[nearest_points] = cluster
+
+        # Recalculate centroids
+        centroids = np.array([X[labels == i].mean(axis=0) if np.sum(labels == i) > 0 else centroids[i] for i in range(n_clusters)])
+        
+    return labels, centroids
+
+# Example usage
+np.random.seed(0)
+X = np.random.rand(100, 2)  # Replace with your dataset
+n_clusters = 3
+labels, centroids = constrained_kmeans(X, n_clusters)
+print(f"Cluster sizes: {np.bincount(labels)}")
