@@ -1,10 +1,10 @@
 import numpy as np
 from sklearn.cluster import KMeans
-from sklearn.metrics import pairwise_distances_argmin_min
+from sklearn.metrics import pairwise_distances_argmin_min, silhouette_score
 
 def constrained_kmeans(X, n_clusters, max_size_ratio=0.6, min_size_ratio=0.0075, max_iter=10):
     # Initialize KMeans
-    kmeans = KMeans(n_clusters=n_clusters, n_init=10)
+    kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=0)
     labels = kmeans.fit_predict(X)
     centroids = kmeans.cluster_centers_
     
@@ -46,6 +46,13 @@ def constrained_kmeans(X, n_clusters, max_size_ratio=0.6, min_size_ratio=0.0075,
         # Recalculate centroids
         centroids = np.array([X[labels == i].mean(axis=0) if np.sum(labels == i) > 0 else centroids[i] for i in range(n_clusters)])
         
+    # Calculate and print Silhouette Score
+    if len(np.unique(labels)) > 1:
+        ss = silhouette_score(X, labels)
+        print(f"Silhouette Score (SS) after constrained K-Means: {ss:.4f}")
+    else:
+        print("Silhouette Score could not be calculated due to only one cluster being formed.")
+
     return labels, centroids
 
 # Example usage
