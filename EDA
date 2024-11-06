@@ -77,3 +77,28 @@ if not missing_values.empty:
     plt.ylabel("Number of Missing Values")
     plt.xlabel("Features")
     plt.show()
+
+
+############################################
+
+# 6. Density or Bar Plot for Selected Features Based on `typ` Array
+sample_columns = data.columns[:10]  # Adjust to sample features as needed
+
+for idx, column in enumerate(sample_columns):
+    plt.figure(figsize=(8, 5))
+    
+    if typ[idx] == 1:  # 1 indicates integer feature in `typ`
+        # Bar plot for integer features
+        value_counts = data[column].value_counts().sort_index()
+        plt.bar(value_counts.index, value_counts.values)
+        plt.title(f"Bar Plot for {column}")
+        plt.xlabel(column)
+        plt.ylabel("Frequency")
+    else:
+        # Density plot for continuous features
+        sns.kdeplot(data[column], fill=True)
+        plt.title(f"Density Plot for {column}")
+        plt.xlabel(column)
+        
+    plt.xlim(data[column].min(), data[column].max())
+    plt.show()
