@@ -1,0 +1,56 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
+# Assume `data` is your DataFrame with 46 features
+# Generate a summary of statistics for numerical columns
+summary_stats = data.describe()
+print("Summary Statistics:\n", summary_stats)
+
+# 1. Correlation Matrix
+plt.figure(figsize=(12, 10))
+correlation_matrix = data.corr()
+sns.heatmap(correlation_matrix, annot=False, cmap='coolwarm', center=0)
+plt.title("Correlation Matrix")
+plt.show()
+
+# 2. Distribution of Numerical Features (Histograms)
+data.hist(bins=20, figsize=(15, 15))
+plt.suptitle("Feature Distributions")
+plt.show()
+
+# 3. Missing Values Analysis
+missing_values = data.isnull().sum()
+missing_values = missing_values[missing_values > 0]  # Only show features with missing values
+print("Missing Values:\n", missing_values)
+
+# 4. Principal Component Analysis (PCA) Plot
+# Standardize data before PCA
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(data)
+
+# PCA with two components for visualization
+pca = PCA(n_components=2)
+pca_components = pca.fit_transform(scaled_data)
+
+plt.figure(figsize=(8, 6))
+plt.scatter(pca_components[:, 0], pca_components[:, 1], alpha=0.5)
+plt.title("PCA - 2D Visualization")
+plt.xlabel("Principal Component 1")
+plt.ylabel("Principal Component 2")
+plt.show()
+
+# 5. Feature-wise Mean and Standard Deviation
+feature_means = data.mean()
+feature_stds = data.std()
+print("Feature Means:\n", feature_means)
+print("Feature Standard Deviations:\n", feature_stds)
+
+# Optional: Density Plot of Features
+# Density plot for selected features only (for manageability)
+sampled_columns = data.columns[:10]  # Select only first 10 for example
+data[sampled_columns].plot(kind='density', subplots=True, layout=(5, 2), figsize=(12, 10), sharex=False)
+plt.suptitle("Density Plots for Sampled Features")
+plt.show()
