@@ -2,7 +2,7 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.mixture import GaussianMixture
 from skopt import BayesSearchCV
 from skopt.space import Integer, Real, Categorical
-from sklearn.metrics import silhouette_score, make_scorer
+from sklearn.metrics import silhouette_score
 import pandas as pd
 import numpy as np
 
@@ -11,8 +11,8 @@ min_cluster_size = 0.0075  # 0.75% of the total data
 max_cluster_size = 0.6     # 60% of the total data
 n_samples = X_scaled.shape[0]
 
-# Custom Scorer with Cluster Size Penalties
-def silhouette_with_penalty(estimator, X):
+# Custom Silhouette Score with Penalties for Cluster Size Constraints
+def silhouette_with_penalty_no_ytrue(estimator, X):
     labels = estimator.fit_predict(X)
     unique, counts = np.unique(labels, return_counts=True)
     cluster_sizes = counts / n_samples  # Cluster sizes as proportions of the dataset
@@ -31,8 +31,6 @@ def silhouette_with_penalty(estimator, X):
 
     return ss - penalty  # Subtract penalty from Silhouette Score
 
-scorer = make_scorer(silhouette_with_penalty, greater_is_better=True)
-
 # 1. GMM Optimization with Cluster Constraints
 gmm_param_grid = {
     "n_components": Integer(4, 8),
@@ -45,7 +43,7 @@ gmm_opt = BayesSearchCV(
     GaussianMixture(random_state=0),
     gmm_param_grid,
     n_iter=50,
-    scoring=scorer,
+    scoring=silhouette_with_penalty_no_ytrue,  # Pass custom function directly
     cv=3,
     n_jobs=-1,
     random_state=0
@@ -65,7 +63,7 @@ kmeans_opt = BayesSearchCV(
     KMeans(random_state=0),
     kmeans_param_grid,
     n_iter=50,
-    scoring=scorer,
+    scoring=silhouette_with_penalty_no_ytrue,  # Pass custom function directly
     cv=3,
     n_jobs=-1,
     random_state=0
@@ -84,7 +82,7 @@ dbscan_opt = BayesSearchCV(
     DBSCAN(),
     dbscan_param_grid,
     n_iter=50,
-    scoring=scorer,
+    scoring=silhouette_with_penalty_no_ytrue,  # Pass custom function directly
     cv=3,
     n_jobs=-1,
     random_state=0
