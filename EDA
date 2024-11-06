@@ -1,87 +1,6 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
-# Assume `data` is your DataFrame with 46 features
-# Generate Summary Statistics
-summary_stats = data.describe()
-print("Summary Statistics:\n", summary_stats)
-
-# 1. Distribution of Numerical Features (Histograms)
-batch_size = 10
-for i in range(0, data.shape[1], batch_size):
-    data.iloc[:, i:i+batch_size].hist(bins=20, figsize=(15, 10))
-    plt.suptitle(f"Feature Distributions (Features {i+1} to {min(i+batch_size, data.shape[1])})")
-    plt.show()
-
-# 2. Correlation Matrix
-plt.figure(figsize=(12, 10))
-correlation_matrix = data.corr()
-sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm", center=0)
-plt.title("Correlation Matrix")
-plt.show()
-
-# 3. Box Plots of Feature Ranges by Quartiles
-for i in range(0, data.shape[1], batch_size):
-    data.iloc[:, i:i+batch_size].plot(kind='box', subplots=True, layout=(2, 5), figsize=(15, 8), sharey=False)
-    plt.suptitle(f"Feature Box Plots (Features {i+1} to {min(i+batch_size, data.shape[1])})")
-    plt.show()
-
-# 4. Feature-wise Mean and Standard Deviation
-feature_means = data.mean()
-feature_stds = data.std()
-
-plt.figure(figsize=(15, 6))
-plt.bar(feature_means.index, feature_means, yerr=feature_stds)
-plt.xticks(rotation=90)
-plt.title("Feature Means with Standard Deviations")
-plt.ylabel("Mean")
-plt.xlabel("Features")
-plt.show()
-
-# 5. PCA for Dimensional Reduction and Clustering Check
-scaler = StandardScaler()
-scaled_data = scaler.fit_transform(data)
-
-pca = PCA(n_components=2)
-pca_components = pca.fit_transform(scaled_data)
-
-plt.figure(figsize=(8, 6))
-plt.scatter(pca_components[:, 0], pca_components[:, 1], alpha=0.5)
-plt.title("PCA - 2D Visualization")
-plt.xlabel("Principal Component 1")
-plt.ylabel("Principal Component 2")
-plt.xlim(pca_components[:, 0].min(), pca_components[:, 0].max())
-plt.ylim(pca_components[:, 1].min(), pca_components[:, 1].max())
-plt.show()
-
-# 6. Density Plot for Selected Features
-sample_columns = data.columns[:10]  # Adjust to sample features as needed
-for column in sample_columns:
-    plt.figure(figsize=(8, 5))
-    sns.kdeplot(data[column], fill=True)
-    plt.title(f"Density Plot for {column}")
-    plt.xlim(data[column].min(), data[column].max())
-    plt.show()
-
-# 7. Missing Values Analysis
-missing_values = data.isnull().sum()
-missing_values = missing_values[missing_values > 0]  # Only show features with missing values
-
-if not missing_values.empty:
-    plt.figure(figsize=(10, 5))
-    missing_values.plot(kind='bar', color='skyblue')
-    plt.title("Missing Values per Feature")
-    plt.ylabel("Number of Missing Values")
-    plt.xlabel("Features")
-    plt.show()
-
-
-############################################
-
 # 6. Density or Bar Plot for Selected Features Based on `typ` Array
+import numpy as np
+
 sample_columns = data.columns[:10]  # Adjust to sample features as needed
 
 for idx, column in enumerate(sample_columns):
@@ -90,10 +9,12 @@ for idx, column in enumerate(sample_columns):
     if typ[idx] == 1:  # 1 indicates integer feature in `typ`
         # Bar plot for integer features
         value_counts = data[column].value_counts().sort_index()
-        plt.bar(value_counts.index, value_counts.values)
+        plt.bar(value_counts.index, value_counts.values, align='center')  # Center the bars on integer values
         plt.title(f"Bar Plot for {column}")
         plt.xlabel(column)
         plt.ylabel("Frequency")
+        plt.xticks(value_counts.index)  # Set x-ticks to integer values only
+        plt.gca().xaxis.set_major_locator(plt.MaxNLocator(integer=True))  # Ensure only whole numbers are shown on x-axis
     else:
         # Density plot for continuous features
         sns.kdeplot(data[column], fill=True)
