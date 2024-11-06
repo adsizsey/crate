@@ -26,53 +26,47 @@ stepwise_ss = []
 stepwise_wcss = []
 selected_features_stepwise = []
 
-# Initial set of features
-remaining_features = list(X.columns)
+# Initialize encoder dimension based on total number of features
+current_encoder_dim = X.shape[1]  # Start with all features
 no_improvement_steps = 0
 best_ss = -1
-current_encoder_dim = len(remaining_features)  # Start with full dimension
 
-while current_encoder_dim > 1:
+while current_encoder_dim >= 1:
     # Define the autoencoder with dynamic encoding dimension
-    input_layer = Input(shape=(len(remaining_features),))
+    input_layer = Input(shape=(X.shape[1],))  # Fixed input layer size
     encoder = Dense(current_encoder_dim, activation="relu")(input_layer)
-    decoder = Dense(len(remaining_features), activation="linear")(encoder)
-
+    decoder = Dense(X.shape[1], activation="linear")(encoder)
+    
     # Compile the autoencoder model
     autoencoder = Model(inputs=input_layer, outputs=decoder)
     autoencoder.compile(optimizer=Adam(), loss='mse')
-
-    # Train the autoencoder on the current subset of features
-    X_subset = X[remaining_features]
-    X_subset_scaled = scaler.fit_transform(X_subset)
-    autoencoder.fit(X_subset_scaled, X_subset_scaled, epochs=50, batch_size=10, verbose=0)
-
+    
+    # Train the autoencoder on the full set of features
+    autoencoder.fit(X_scaled, X_scaled, epochs=50, batch_size=10, verbose=0)
+    
     # Extract encoder weights and determine the top features to retain
     encoder_weights = autoencoder.layers[1].get_weights()[0]
     feature_importance = np.sum(np.abs(encoder_weights), axis=1)
-    n_features_to_keep = int(len(remaining_features) * feature_reduction_ratio)
-    top_feature_indices = np.argsort(feature_importance)[-n_features_to_keep:]
-    selected_features = [remaining_features[i] for i in top_feature_indices]
+    
+    # Sort and keep the top features based on encoding size
+    top_feature_indices = np.argsort(feature_importance)[-current_encoder_dim:]
+    selected_features = [X.columns[i] for i in top_feature_indices]
     selected_features_stepwise.append(selected_features)
-
-    # Update the remaining features list
-    remaining_features = selected_features
-    current_encoder_dim = int(len(remaining_features) * feature_reduction_ratio)
-
+    
     # Clustering on the selected features
     X_selected_scaled = scaler.fit_transform(X[selected_features])
     kmeans = KMeans(n_clusters=n_clusters, random_state=0)
     labels = kmeans.fit_predict(X_selected_scaled)
-
+    
     # Calculate Silhouette Score and WCSS
     if len(np.unique(labels)) > 1:
         ss = silhouette_score(X_selected_scaled, labels)
         wcss = kmeans.inertia_
-
+        
         # Track metrics
         stepwise_ss.append(ss)
         stepwise_wcss.append(wcss)
-
+        
         # Early stopping logic
         if ss > best_ss:
             best_ss = ss
@@ -82,21 +76,23 @@ while current_encoder_dim > 1:
             if no_improvement_steps >= max_no_improvement_steps:
                 break
     else:
-        # Break if clustering fails
         print("Only one cluster formed; stopping.")
         break
+    
+    # Update encoder dimension to reduce by 10% for the next step
+    current_encoder_dim = int(current_encoder_dim * feature_reduction_ratio)
+    if current_encoder_dim < 1:
+        break
 
-# Plot Silhouette Score and WCSS over feature reduction steps
+# Plot Silhouette Score and WCSS with the X-axis as the number of features kept
+features_kept = [len(features) for features in selected_features_stepwise]
+
 plt.figure(figsize=(12, 6))
-plt.plot(range(len(stepwise_ss)), stepwise_ss, marker='o', label="Silhouette Score")
-plt.plot(range(len(stepwise_wcss)), stepwise_wcss, marker='s', label="WCSS (Inertia)")
-plt.xlabel("Feature Reduction Steps")
+plt.plot(features_kept, stepwise_ss, marker='o', label="Silhouette Score")
+plt.plot(features_kept, stepwise_wcss, marker='s', label="WCSS (Inertia)")
+plt.xlabel("Number of Features Kept")
 plt.ylabel("Score")
 plt.legend()
-plt.title("Clustering Quality over Stepwise Feature Reduction")
+plt.title("Clustering Quality over Number of Features Kept")
 plt.grid(True)
 plt.show()
-
-# Print the final set of selected features for each step
-for i, features in enumerate(selected_features_stepwise):
-    print(f"Step {i+1}: Selected Features ({len(features)}) - {features}")
