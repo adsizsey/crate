@@ -1,62 +1,77 @@
 \documentclass{article}
 \usepackage{graphicx}
 \usepackage{subcaption}
-\usepackage[margin=1in]{geometry} % optional, to adjust page margins
 
 \begin{document}
 
 \begin{figure}[htp]
     \centering
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f1.png}
-        \caption{Plot 1}
-    \end{subfigure}%
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f2.png}
-        \caption{Plot 2}
-    \end{subfigure}%
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f3.png}
-        \caption{Plot 3}
-    \end{subfigure}
     
-    \begin{subfigure}{0.3\textwidth}
+    \begin{minipage}{0.5\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{f4.png}
-        \caption{Plot 4}
-    \end{subfigure}%
-    \begin{subfigure}{0.3\textwidth}
+        \includegraphics[width=\linewidth]{HL_segmentation/f1.png}
+        \captionof{subfigure}{Plot 1}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{f5.png}
-        \caption{Plot 5}
-    \end{subfigure}%
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f6.png}
-        \caption{Plot 6}
-    \end{subfigure}
+        \includegraphics[width=\linewidth]{HL_segmentation/f2.png}
+        \captionof{subfigure}{Plot 2}
+    \end{minipage}
     
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f7.png}
-        \caption{Plot 7}
-    \end{subfigure}%
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f8.png}
-        \caption{Plot 8}
-    \end{subfigure}%
-    \begin{subfigure}{0.3\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{f9.png}
-        \caption{Plot 9}
-    \end{subfigure}
+    \vspace{1em} % Adjust space between rows
     
-    \caption{Nine plots arranged in a 3x3 grid}
-    \label{fig:9plots}
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f3.png}
+        \captionof{subfigure}{Plot 3}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f4.png}
+        \captionof{subfigure}{Plot 4}
+    \end{minipage}
+    
+    \vspace{1em}
+    
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f5.png}
+        \captionof{subfigure}{Plot 5}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f6.png}
+        \captionof{subfigure}{Plot 6}
+    \end{minipage}
+    
+    \vspace{1em}
+    
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f7.png}
+        \captionof{subfigure}{Plot 7}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f8.png}
+        \captionof{subfigure}{Plot 8}
+    \end{minipage}
+    
+    \vspace{1em}
+    
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f9.png}
+        \captionof{subfigure}{Plot 9}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{HL_segmentation/f10.png}
+        \captionof{subfigure}{Plot 10}
+    \end{minipage}
+    
+    \caption{Ten plots arranged in a 5x2 grid}
+    \label{fig:10plots}
 \end{figure}
 
 \end{document}
