@@ -2,65 +2,83 @@ import pandas as pd
 import random
 import numpy as np
 
-# Irrelevant knowledge pool
-irrelevant_knowledge = [
-    f"Irrelevant fact {i}" for i in range(1, 2001)  # Increase pool size for diversity
+# Example Input DataFrame
+df = pd.DataFrame({
+    "knowledge": [
+        "The Eiffel Tower is located in Paris.",
+        "Albert Einstein developed the theory of relativity.",
+        "The Great Wall of China is in China.",
+        "The Taj Mahal is in India.",
+        "Mount Everest is the tallest mountain on Earth.",
+        "The Statue of Liberty is in New York City.",
+        "The Amazon Rainforest is the largest tropical rainforest."
+    ],
+    "question": [
+        "Where is the Eiffel Tower?",
+        "Who developed the theory of relativity?",
+        "Where is the Great Wall of China?",
+        "Where is the Taj Mahal?",
+        "What is the tallest mountain on Earth?",
+        "Where is the Statue of Liberty?",
+        "What is the largest tropical rainforest?"
+    ],
+    "answer": [
+        "Paris",
+        "Albert Einstein",
+        "China",
+        "India",
+        "Mount Everest",
+        "New York City",
+        "The Amazon Rainforest"
+    ]
+})
+
+# Step 1: Generate synthetic fat knowledge
+num_samples = 1000  # Total desired samples
+num_fat_knowledge = num_samples // 2  # Each fat knowledge will have 1 legit + 1 hallucinated
+
+# Randomly sample 5–10 knowledge snippets and combine them
+fat_knowledge_list = [
+    " ".join(random.sample(df["knowledge"].tolist(), random.randint(5, 10)))
+    for _ in range(num_fat_knowledge)
 ]
 
-# Relevant knowledge and questions
-relevant_knowledge = [
-    "The Eiffel Tower is located in Paris.",
-    "Albert Einstein developed the theory of relativity.",
-    "The Taj Mahal is in India.",
-    "Mount Everest is the tallest mountain on Earth.",
-]
-legit_questions_answers = [
-    ("Where is the Eiffel Tower?", "Paris"),
-    ("Who developed the theory of relativity?", "Albert Einstein"),
-    ("Where is the Taj Mahal?", "India"),
-    ("What is the tallest mountain on Earth?", "Mount Everest"),
-]
+# Randomly insert relevant knowledge into the fat knowledge
+relevant_indices = np.random.randint(0, len(df), num_fat_knowledge)
+relevant_snippets = df.iloc[relevant_indices]["knowledge"].tolist()
 
-# Generate the base DataFrame
-num_samples = 1000  # Total samples
-num_relevant_samples = num_samples // 2  # Half for legit, half for hallucinated
-indices = np.random.randint(0, len(relevant_knowledge), num_relevant_samples)
+# Insert relevant knowledge into random positions in the fat knowledge
+final_fat_knowledge = []
+for i, fat_knowledge in enumerate(fat_knowledge_list):
+    knowledge_parts = fat_knowledge.split(" ")
+    insert_position = random.randint(0, len(knowledge_parts))
+    knowledge_parts.insert(insert_position, relevant_snippets[i])
+    final_fat_knowledge.append(" ".join(knowledge_parts))
 
-# Randomly select relevant knowledge and their corresponding questions/answers
-relevant_snippets = [relevant_knowledge[i] for i in indices]
-questions = [legit_questions_answers[i][0] for i in indices]
-legit_answers = [legit_questions_answers[i][1] for i in indices]
+# Step 2: Generate legitimate and hallucinated samples
+questions = df.iloc[relevant_indices]["question"].tolist()
+legit_answers = df.iloc[relevant_indices]["answer"].tolist()
 
-# Generate irrelevant knowledge for all samples
-irrelevant_sets = [" ".join(random.sample(irrelevant_knowledge, 100)) for _ in range(num_relevant_samples)]
-
-# Randomly insert relevant knowledge into the irrelevant knowledge
-fat_knowledge = []
-for i, snippet in enumerate(relevant_snippets):
-    insert_position = random.randint(0, 100)
-    irrelevant_list = irrelevant_sets[i].split(" ")
-    irrelevant_list.insert(insert_position, snippet)
-    fat_knowledge.append(" ".join(irrelevant_list))
-
-# Create the legitimate and hallucinated DataFrame
+# Create legitimate samples
 df_legit = pd.DataFrame({
-    "fat_knowledge": fat_knowledge,
+    "fat_knowledge": final_fat_knowledge,
     "question": questions,
     "answer": legit_answers,
     "label": "legit"
 })
 
+# Create hallucinated samples
 df_hallucinated = pd.DataFrame({
-    "fat_knowledge": fat_knowledge,
+    "fat_knowledge": final_fat_knowledge,
     "question": questions,
-    "answer": ["This is a hallucinated answer."] * num_relevant_samples,
+    "answer": ["This is a hallucinated answer."] * num_fat_knowledge,
     "label": "hallucinated"
 })
 
-# Combine both DataFrames
+# Combine both datasets
 df_synthetic = pd.concat([df_legit, df_hallucinated], ignore_index=True)
 
-# Save or preview
-df_synthetic.to_csv("synthetic_fat_knowledge_vectorized.csv", index=False)
+# Save or preview the dataset
+df_synthetic.to_csv("synthetic_fat_knowledge.csv", index=False)
 print(df_synthetic.head())
 print(f"Total samples: {len(df_synthetic)}")
