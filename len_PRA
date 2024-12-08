@@ -1,0 +1,49 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+
+
+# Calculate the length of the knowledge field
+df['knowledge_length'] = df['knowledge'].apply(len)
+
+# Define quantile-based bins
+num_bins = 4  # Adjust the number of bins
+bin_edges = np.quantile(df['knowledge_length'], q=np.linspace(0, 1, num_bins + 1))
+df['length_bin'] = pd.cut(df['knowledge_length'], bins=bin_edges, include_lowest=True)
+
+# Group by length_bin and calculate metrics
+metrics = []
+for length_bin, group in df.groupby('length_bin'):
+    accuracy = accuracy_score(group['ground_truth_label'], group['guardrail_label'])
+    precision = precision_score(
+        group['ground_truth_label'], group['guardrail_label'], pos_label="legit", average="binary"
+    )
+    recall = recall_score(
+        group['ground_truth_label'], group['guardrail_label'], pos_label="legit", average="binary"
+    )
+    metrics.append({"length_bin": length_bin, "accuracy": accuracy, "precision": precision, "recall": recall})
+
+# Convert metrics to DataFrame for easier plotting
+metrics_df = pd.DataFrame(metrics)
+
+# Plot the metrics
+plt.figure(figsize=(12, 6))
+
+# Plot accuracy
+plt.plot(metrics_df['length_bin'].astype(str), metrics_df['accuracy'], label='Accuracy', marker='o')
+
+# Plot precision
+plt.plot(metrics_df['length_bin'].astype(str), metrics_df['precision'], label='Precision', marker='o')
+
+# Plot recall
+plt.plot(metrics_df['length_bin'].astype(str), metrics_df['recall'], label='Recall', marker='o')
+
+# Customize the plot
+plt.title('Model Performance by Knowledge Length (Quantile Binning)', fontsize=14)
+plt.xlabel('Knowledge Length Bins', fontsize=12)
+plt.ylabel('Score', fontsize=12)
+plt.legend()
+plt.grid()
+plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+plt.show()
