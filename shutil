@@ -1,0 +1,21 @@
+import shutil
+import os
+
+# Source folder (contents to be copied)
+source = "/path/to/source"
+destination = "/path/to/destination"
+
+# Ensure destination exists
+os.makedirs(destination, exist_ok=True)
+
+# Copy contents of the source folder
+for item in os.listdir(source):
+    source_item = os.path.join(source, item)
+    destination_item = os.path.join(destination, item)
+
+    if os.path.isdir(source_item):
+        shutil.copytree(source_item, destination_item, copy_function=shutil.copy2)
+    else:
+        shutil.copy2(source_item, destination_item)
+
+print(f"Copied contents of {source} into {destination}")
