@@ -1,36 +1,35 @@
 import os
 import shutil
 
-def copy_and_make_writable(source, destination):
+def copy_and_rename_tex_project(source_main_tex, source_tex_folder, destination, new_main_tex_name, new_tex_folder_name):
     # Ensure destination exists
     os.makedirs(destination, exist_ok=True)
 
-    # Copy contents of the source directory
-    for item in os.listdir(source):
-        source_item = os.path.join(source, item)
-        destination_item = os.path.join(destination, item)
+    # Copy the main .tex file and rename it
+    main_tex_destination = os.path.join(destination, new_main_tex_name)
+    shutil.copy2(source_main_tex, main_tex_destination)
+    print(f"Copied and renamed main .tex file to {main_tex_destination}")
 
-        if os.path.isdir(source_item):
-            shutil.copytree(source_item, destination_item, copy_function=shutil.copy2)
-        else:
-            shutil.copy2(source_item, destination_item)
+    # Copy the folder containing other .tex files and rename it
+    tex_folder_destination = os.path.join(destination, new_tex_folder_name)
+    shutil.copytree(source_tex_folder, tex_folder_destination, copy_function=shutil.copy2)
+    print(f"Copied and renamed .tex folder to {tex_folder_destination}")
 
-    # Make all files and directories writable in the destination
+    # Make all files and folders writable in the destination
     for root, dirs, files in os.walk(destination):
-        # Set permissions for directories
         for dir_name in dirs:
-            dir_path = os.path.join(root, dir_name)
-            os.chmod(dir_path, 0o777)  # Full permissions for directories
-
-        # Set permissions for files
+            os.chmod(os.path.join(root, dir_name), 0o777)  # Full permissions for directories
         for file_name in files:
-            file_path = os.path.join(root, file_name)
-            os.chmod(file_path, 0o666)  # Read/write for files
+            os.chmod(os.path.join(root, file_name), 0o666)  # Read/write permissions for files
+
+    print(f"Project copied and made writable under {destination}")
 
 # Example usage
-source = "/path/to/source"
-destination = "/path/to/destination"
+source_main_tex = "/path/to/source/main.tex"  # Path to the main .tex file
+source_tex_folder = "/path/to/source/Tex_files"  # Path to the folder containing additional .tex files
+destination = "/path/to/destination"  # Destination folder
 
-copy_and_make_writable(source, destination)
+new_main_tex_name = "new_main.tex"  # New name for the main .tex file
+new_tex_folder_name = "New_Tex_Files"  # New name for the folder containing .tex files
 
-print(f"Copied contents from {source} to {destination} and made them writable.")
+copy_and_rename_tex_project(source_main_tex, source_tex_folder, destination, new_main_tex_name, new_tex_folder_name)
