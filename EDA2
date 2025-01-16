@@ -1,0 +1,120 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.feature_extraction.text import TfidfVectorizer
+from wordcloud import WordCloud
+
+# Sample DataFrame
+data = pd.DataFrame({
+    'ExpectedIntent': ['Intent1', 'Intent1', 'Intent2', 'Intent2', 'Intent3'],
+    'Utterance': [
+        'I cannot access my account',
+        'Login issues with my account',
+        'Billing problem with my last order',
+        'I was overcharged on my bill',
+        'Shipping delay for my recent purchase'
+    ]
+})
+
+### 1. Basic Data Overview
+print("Dataset Shape:", data.shape)
+print(data.info())
+print(data.head())
+
+# Check for Missing Values
+missing_values = data.isnull().sum()
+print("Missing Values:\n", missing_values)
+
+### 2. Class Distribution
+intent_counts = data['ExpectedIntent'].value_counts()
+plt.figure(figsize=(10, 6))
+sns.barplot(x=intent_counts.index, y=intent_counts.values, palette="viridis")
+plt.title("Distribution of Expected Intents")
+plt.xlabel("Intent")
+plt.ylabel("Count")
+plt.xticks(rotation=45)
+plt.show()
+
+### 3. Utterance Length Analysis
+data['UtteranceLength'] = data['Utterance'].apply(lambda x: len(str(x).split()))
+plt.figure(figsize=(10, 6))
+sns.histplot(data['UtteranceLength'], kde=True, bins=30, color='blue')
+plt.title("Distribution of Utterance Lengths")
+plt.xlabel("Number of Words")
+plt.ylabel("Frequency")
+plt.show()
+
+### 4. Word Frequency Analysis
+# Most Common Words
+from sklearn.feature_extraction.text import CountVectorizer
+vectorizer = CountVectorizer(stop_words='english')
+X = vectorizer.fit_transform(data['Utterance'])
+word_counts = X.toarray().sum(axis=0)
+words = vectorizer.get_feature_names_out()
+word_freq = pd.DataFrame({'Word': words, 'Frequency': word_counts}).sort_values(by='Frequency', ascending=False)
+
+# Plot Most Common Words
+top_n = 20
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Frequency', y='Word', data=word_freq.head(top_n), palette="plasma")
+plt.title(f"Top {top_n} Most Common Words in Utterances")
+plt.xlabel("Frequency")
+plt.ylabel("Word")
+plt.show()
+
+### 5. Word Cloud
+all_text = " ".join(data['Utterance'].dropna().astype(str).values)
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_text)
+plt.figure(figsize=(10, 6))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis('off')
+plt.title("Word Cloud of Utterances")
+plt.show()
+
+### 6. TF-IDF Analysis
+# Combine all utterances for each intent
+intent_utterances = data.groupby('ExpectedIntent')['Utterance'].apply(lambda x: ' '.join(x)).reset_index()
+
+# Initialize TF-IDF Vectorizer
+vectorizer = TfidfVectorizer(stop_words='english')
+
+# Fit and transform the combined utterances
+tfidf_matrix = vectorizer.fit_transform(intent_utterances['Utterance'])
+
+# Get feature names (words)
+feature_names = vectorizer.get_feature_names_out()
+
+# Number of top words to extract
+top_n = 5
+
+# DataFrame to store top words for each intent
+top_words_df = pd.DataFrame(columns=['Intent', 'Top_Words'])
+
+# Iterate over each intent's TF-IDF vector
+for idx, intent in enumerate(intent_utterances['ExpectedIntent']):
+    # Get the TF-IDF vector for the intent
+    tfidf_vector = tfidf_matrix[idx]
+    
+    # Convert to DataFrame for easy manipulation
+    tfidf_df = pd.DataFrame(tfidf_vector.T.todense(), index=feature_names, columns=["TF-IDF"])
+    
+    # Sort by TF-IDF score in descending order
+    tfidf_df = tfidf_df.sort_values("TF-IDF", ascending=False)
+    
+    # Get the top N words and their scores
+    top_words = tfidf_df.head(top_n)
+    
+    # Format as 'word (score)' and join with commas
+    top_words_formatted = ', '.join([f"{word} ({score:.2f})" for word, score in top_words.itertuples()])
+    
+    # Append to the DataFrame
+    top_words_df = top_words_df.append({'Intent': intent, 'Top_Words': top_words_formatted}, ignore_index=True)
+
+# Display the DataFrame
+print("\nTop Words by Intent:")
+print(top_words_df)
+
+# Convert DataFrame to LaTeX (optional)
+latex_code = top_words_df.to_latex(index=False)
+print("\nLaTeX Format:")
+print(latex_code)
