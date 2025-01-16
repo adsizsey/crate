@@ -88,7 +88,7 @@ feature_names = vectorizer.get_feature_names_out()
 top_n = 5
 
 # DataFrame to store top words for each intent
-top_words_df = pd.DataFrame(columns=['Intent', 'Top_Words'])
+rows = []
 
 # Iterate over each intent's TF-IDF vector
 for idx, intent in enumerate(intent_utterances['ExpectedIntent']):
@@ -107,8 +107,11 @@ for idx, intent in enumerate(intent_utterances['ExpectedIntent']):
     # Format as 'word (score)' and join with commas
     top_words_formatted = ', '.join([f"{word} ({score:.2f})" for word, score in top_words.itertuples()])
     
-    # Append to the DataFrame
-    top_words_df = top_words_df.append({'Intent': intent, 'Top_Words': top_words_formatted}, ignore_index=True)
+    # Append the row to the list
+    rows.append({'Intent': intent, 'Top_Words': top_words_formatted})
+
+# Create the DataFrame from the list
+top_words_df = pd.DataFrame(rows)
 
 # Display the DataFrame
 print("\nTop Words by Intent:")
