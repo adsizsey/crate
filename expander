@@ -1,0 +1,37 @@
+import pandas as pd
+import ast  # To safely evaluate the string as a list
+
+# Example initial dataset
+data = pd.DataFrame({
+    'ID': [1, 2],
+    'Utterance': ["I cannot access my account.", "I forgot my password."],
+    'Responses': [
+        '["Response1_1", "Response1_2", "Response1_3", "Response1_4", "Response1_5", "Response1_6", "Response1_7", "Response1_8", "Response1_9", "Response1_10"]',
+        '["Response2_1", "Response2_2", "Response2_3", "Response2_4", "Response2_5", "Response2_6", "Response2_7", "Response2_8", "Response2_9", "Response2_10"]'
+    ]
+})
+
+# Expanding the dataset
+expanded_rows = []
+
+for _, row in data.iterrows():
+    # Parse the plain text into a list
+    try:
+        responses = ast.literal_eval(row['Responses'])
+    except (SyntaxError, ValueError) as e:
+        print(f"Error parsing responses for ID {row['ID']}: {e}")
+        responses = []  # Fallback to an empty list if parsing fails
+    
+    # Create a row for each response
+    for response in responses:
+        expanded_rows.append({
+            'ID': row['ID'],
+            'OriginalUtterance': row['Utterance'],
+            'RephrasedUtterance': response
+        })
+
+# Convert to a DataFrame
+expanded_df = pd.DataFrame(expanded_rows)
+
+# Display the expanded DataFrame
+print(expanded_df)
