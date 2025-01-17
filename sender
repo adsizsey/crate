@@ -1,0 +1,30 @@
+import time
+
+def send_message(message, llm_function, max_retries=3):
+    """
+    Sends a message to the LLM with retry logic.
+    
+    Args:
+        message (str): The message to send.
+        llm_function (callable): The function to call the LLM (e.g., API function).
+        max_retries (int): Maximum number of retries before giving up.
+    
+    Returns:
+        response: The response from the LLM if successful.
+    
+    Raises:
+        Exception: If the maximum number of retries is reached.
+    """
+    retries = 0
+    while retries < max_retries:
+        try:
+            response = llm_function(message)  # Replace with your LLM call logic
+            return response  # Return the response if successful
+        except Exception as e:
+            retries += 1
+            print(f"Attempt {retries} failed: {e}")
+            if retries < max_retries:
+                print("Retrying in 5 seconds...")
+                time.sleep(5)  # Wait for 5 seconds before retrying
+            else:
+                raise Exception("Maximum retries reached. Failed to send the message.") from e
