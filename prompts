@@ -1,0 +1,22 @@
+categories = [
+    "informal", 
+    "broken English", 
+    "synonym replacement", 
+    "passive voice", 
+    "contextual embellishment"
+]
+
+prompts = []
+
+for category in categories:
+    prompts.append(
+        f"""Task: Rewrite the following sentence in {category} in 10 different ways. Ensure the meaning remains the same and the output is a Python-style list of strings.
+
+Input: "{{utterance}}"
+
+Output: ["Rewrite 1", "Rewrite 2", ..., "Rewrite 10"]"""
+    )
+
+# Example of replacing {utterance} dynamically
+utterance = "I cannot access my account."
+category_prompts = [prompt.replace("{utterance}", utterance) for prompt in prompts]
