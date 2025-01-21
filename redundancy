@@ -1,0 +1,28 @@
+import pandas as pd
+
+# Example dataset with ExpectedIntent and Utterance
+data = pd.DataFrame({
+    'ExpectedIntent': ['Intent1', 'Intent2', 'Intent3'],
+    'Utterance': [
+        'I cannot access my account.',
+        'I forgot my password.',
+        'There is an issue with my bill.'
+    ]
+})
+
+# Redundant column values
+bot_name = "MyBot"
+bot_alias_name = "MyBotAlias"
+locale = "en-US"
+tag = "Support"
+
+# Create redundant columns
+data['ConversationID'] = range(1, len(data) + 1)  # Index starting from 1
+data['BotName'] = bot_name
+data['BotAliasName'] = bot_alias_name
+data['Locale'] = locale
+data['Tag'] = tag
+data['Category'] = data['ExpectedIntent']  # Copy of ExpectedIntent column
+
+# Display the resulting DataFrame
+print(data)
