@@ -1,0 +1,67 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+import re
+
+# Load datasets
+datasets = {
+    "Lex": pd.read_csv("lex_results.csv"),
+    "Informal": pd.read_csv("informal_results.csv"),
+    "Broken": pd.read_csv("broken_results.csv"),
+    "Contextual": pd.read_csv("contextual_results.csv"),
+    "Passive": pd.read_csv("passive_results.csv"),
+    "Synonym": pd.read_csv("synonym_results.csv"),
+}
+
+# Basic text cleaning function
+def clean_text(text):
+    # Remove special characters, numbers, and extra spaces
+    text = re.sub(r"[^a-zA-Z\s]", "", text)  # Keep only letters and spaces
+    text = re.sub(r"\s+", " ", text)         # Remove extra spaces
+    return text.strip().lower()
+
+# Apply preprocessing
+for name, df in datasets.items():
+    df['Utterance'] = df['Utterance'].apply(clean_text)
+
+# Split Lex dataset into train and test sets
+lex_data = datasets["Lex"]
+train_data, lex_test_data = train_test_split(
+    lex_data, test_size=0.3, stratify=lex_data['ExpectedIntent'], random_state=42
+)
+
+# Prepare TF-IDF Vectorizer
+vectorizer = TfidfVectorizer(lowercase=True, stop_words='english', max_features=5000)
+X_train = vectorizer.fit_transform(train_data['Utterance'])
+y_train = train_data['ExpectedIntent']
+
+# Train Logistic Regression Model
+model = LogisticRegression(max_iter=1000, random_state=42)
+model.fit(X_train, y_train)
+
+# Evaluate on Lex unseen test data
+X_test_lex = vectorizer.transform(lex_test_data['Utterance'])
+y_test_lex = lex_test_data['ExpectedIntent']
+y_pred_lex = model.predict(X_test_lex)
+
+print("Evaluation on Lex Test Data:")
+print(classification_report(y_test_lex, y_pred_lex))
+
+# Evaluate on all datasets
+for name, df in datasets.items():
+    X_test = vectorizer.transform(df['Utterance'])
+    y_test = df['ExpectedIntent']
+    y_pred = model.predict(X_test)
+    
+    print(f"\nEvaluation on {name} Dataset:")
+    print(classification_report(y_test, y_pred))
+    
+    # Plot confusion matrix
+    disp = ConfusionMatrixDisplay.from_predictions(
+        y_test, y_pred, display_labels=model.classes_, cmap="Blues"
+    )
+    disp.ax_.set_title(f"Confusion Matrix - {name}")
+    plt.show()
