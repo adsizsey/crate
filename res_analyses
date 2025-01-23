@@ -1,0 +1,154 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+import numpy as np
+import plotly.graph_objects as go
+
+# Load datasets
+datasets = {
+    "Lex": pd.read_csv("lex_results.csv"),
+    "Informal": pd.read_csv("informal_results.csv"),
+    "Broken": pd.read_csv("broken_results.csv"),
+    "Contextual": pd.read_csv("contextual_results.csv"),
+    "Passive": pd.read_csv("passive_results.csv"),
+    "Synonym": pd.read_csv("synonym_results.csv"),
+}
+
+# 1. Overall Accuracy Analysis
+results = []
+for name, df in datasets.items():
+    total = len(df)
+    correct = len(df[df['ExpectedIntent'] == df['MappedIntent']])
+    results.append({"Dataset": name, "Accuracy": correct / total})
+accuracy_df = pd.DataFrame(results)
+
+plt.figure(figsize=(8, 6))
+sns.barplot(x="Dataset", y="Accuracy", data=accuracy_df, palette="viridis")
+plt.title("Overall Accuracy Across Datasets")
+plt.ylabel("Accuracy")
+plt.xticks(rotation=45)
+plt.show()
+
+# 2. Fallback Rate Analysis
+results = []
+for name, df in datasets.items():
+    total = len(df)
+    fallback = len(df[df['MappedIntent'] == 'FallBackIntent'])
+    results.append({"Dataset": name, "FallbackRate": fallback / total})
+fallback_df = pd.DataFrame(results)
+
+plt.figure(figsize=(8, 6))
+sns.barplot(x="Dataset", y="FallbackRate", data=fallback_df, palette="coolwarm")
+plt.title("Fallback Rate Across Datasets")
+plt.ylabel("Fallback Rate")
+plt.xticks(rotation=45)
+plt.show()
+
+# 3. Top-K Accuracy
+results = []
+for name, df in datasets.items():
+    total = len(df)
+    top1 = len(df[df['ExpectedIntent'] == df['MappedIntent']])
+    top2 = len(df[
+        (df['ExpectedIntent'] == df['MappedIntent']) | 
+        (df['ExpectedIntent'] == df['NextBestIntent'])
+    ])
+    results.append({"Dataset": name, "Metric": "Top-1 Accuracy", "Value": top1 / total})
+    results.append({"Dataset": name, "Metric": "Top-2 Accuracy", "Value": top2 / total})
+topk_df = pd.DataFrame(results)
+
+plt.figure(figsize=(10, 6))
+sns.barplot(x="Dataset", y="Value", hue="Metric", data=topk_df, palette="magma")
+plt.title("Top-K Accuracy Across Datasets")
+plt.ylabel("Accuracy")
+plt.xticks(rotation=45)
+plt.show()
+
+# 4. Intent Confusion Analysis (Example for one dataset)
+dataset_name = "Lex"
+df = datasets[dataset_name]
+
+conf_matrix = confusion_matrix(df['ExpectedIntent'], df['MappedIntent'], labels=df['ExpectedIntent'].unique())
+conf_df = pd.DataFrame(conf_matrix, index=df['ExpectedIntent'].unique(), columns=df['ExpectedIntent'].unique())
+
+plt.figure(figsize=(12, 10))
+sns.heatmap(conf_df, cmap="coolwarm", xticklabels=True, yticklabels=True)
+plt.title(f"Confusion Matrix for {dataset_name}")
+plt.xlabel("Mapped Intent")
+plt.ylabel("Expected Intent")
+plt.show()
+
+# 5. Probability Distribution of Predictions
+plt.figure(figsize=(10, 6))
+for name, df in datasets.items():
+    sns.kdeplot(df['MappedIntentScore'], label=name)
+plt.title("MappedIntentScore Distribution Across Datasets")
+plt.xlabel("MappedIntentScore")
+plt.ylabel("Density")
+plt.legend()
+plt.show()
+
+# 6. FallBackIntent Confidence Distribution
+plt.figure(figsize=(10, 6))
+for name, df in datasets.items():
+    fallback_scores = df[df['MappedIntent'] == 'FallBackIntent']['MappedIntentScore']
+    sns.kdeplot(fallback_scores, label=name, fill=True)
+plt.title("Confidence Distribution for FallBackIntent")
+plt.xlabel("MappedIntentScore")
+plt.ylabel("Density")
+plt.legend()
+plt.show()
+
+# 7. Dataset-Specific Errors
+results = []
+for name, df in datasets.items():
+    grouped = df.groupby('ExpectedIntent').apply(lambda x: (x['ExpectedIntent'] != x['MappedIntent']).mean())
+    results.append(pd.DataFrame({'Dataset': name, 'ExpectedIntent': grouped.index, 'ErrorRate': grouped.values}))
+error_df = pd.concat(results)
+
+plt.figure(figsize=(12, 8))
+sns.barplot(x="ExpectedIntent", y="ErrorRate", hue="Dataset", data=error_df, palette="Set2")
+plt.title("Error Rates Per Intent Across Datasets")
+plt.ylabel("Error Rate")
+plt.xticks(rotation=90)
+plt.legend()
+plt.show()
+
+# 8. Prediction Shifts Between Datasets
+lex_df = datasets["Lex"]
+informal_df = datasets["Informal"]
+
+source = []
+target = []
+value = []
+
+for intent in lex_df['ExpectedIntent'].unique():
+    source.extend([intent] * len(lex_df['ExpectedIntent'].unique()))
+    target.extend(informal_df['MappedIntent'].unique())
+    value.extend([
+        len(lex_df[(lex_df['ExpectedIntent'] == intent) & (informal_df['MappedIntent'] == intent)])
+        for intent in informal_df['MappedIntent'].unique()
+    ])
+
+fig = go.Figure(go.Sankey(
+    node=dict(label=list(lex_df['ExpectedIntent'].unique()) + list(informal_df['MappedIntent'].unique())),
+    link=dict(source=source, target=target, value=value)
+))
+fig.show()
+
+# 9. NextBestIntent Analysis
+results = []
+for name, df in datasets.items():
+    incorrect = df[df['ExpectedIntent'] != df['MappedIntent']]
+    next_best_correct = len(incorrect[incorrect['ExpectedIntent'] == incorrect['NextBestIntent']])
+    total_incorrect = len(incorrect)
+    results.append({"Dataset": name, "NextBestAccuracy": next_best_correct / total_incorrect if total_incorrect > 0 else 0})
+next_best_df = pd.DataFrame(results)
+
+plt.figure(figsize=(8, 6))
+sns.barplot(x="Dataset", y="NextBestAccuracy", data=next_best_df, palette="cubehelix")
+plt.title("NextBestIntent Accuracy Across Datasets")
+plt.ylabel("Accuracy")
+plt.xticks(rotation=45)
+plt.show()
