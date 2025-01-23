@@ -1,0 +1,45 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Load datasets
+datasets = {
+    "Lex": pd.read_csv("lex_results.csv"),
+    "Informal": pd.read_csv("informal_results.csv"),
+    "Broken": pd.read_csv("broken_results.csv"),
+    "Contextual": pd.read_csv("contextual_results.csv"),
+    "Passive": pd.read_csv("passive_results.csv"),
+    "Synonym": pd.read_csv("synonym_results.csv"),
+}
+
+# Identify the top 5 intents (excluding 'FallBackIntent')
+def get_top_intents(df, top_n=5, exclude='FallBackIntent'):
+    intent_counts = df['ExpectedIntent'].value_counts()
+    top_intents = intent_counts[intent_counts.index != exclude].head(top_n).index.tolist()
+    return top_intents
+
+# Analyze error rates for the top 5 intents across datasets
+results = []
+top_intents = None
+
+for name, df in datasets.items():
+    if top_intents is None:  # Identify top intents from the first dataset
+        top_intents = get_top_intents(df, top_n=5)
+    # Filter for top intents
+    df_filtered = df[df['ExpectedIntent'].isin(top_intents)]
+    # Calculate error rate per intent
+    grouped = df_filtered.groupby('ExpectedIntent').apply(lambda x: (x['ExpectedIntent'] != x['MappedIntent']).mean())
+    results.append(pd.DataFrame({'Dataset': name, 'ExpectedIntent': grouped.index, 'ErrorRate': grouped.values}))
+
+# Combine results into a single DataFrame
+error_df = pd.concat(results)
+
+# Plot Error Rates
+plt.figure(figsize=(12, 8))
+sns.barplot(x="ExpectedIntent", y="ErrorRate", hue="Dataset", data=error_df, palette="Set2")
+plt.title("Error Rates for Top 5 Intents Across Datasets")
+plt.ylabel("Error Rate")
+plt.xticks(rotation=45)
+plt.legend(title="Dataset", bbox_to_anchor=(1.05, 1), loc="upper left")
+plt.tight_layout()
+plt.show()
