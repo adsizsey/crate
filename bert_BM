@@ -11,7 +11,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 # Load datasets
 datasets = {
-    "Lex": pd.read_csv("lex_results.csv"),
+    "Lex_Test": None,  # Placeholder for Lex test data to exclude from training
     "Informal": pd.read_csv("informal_results.csv"),
     "Broken": pd.read_csv("broken_results.csv"),
     "Contextual": pd.read_csv("contextual_results.csv"),
@@ -28,13 +28,17 @@ def clean_text(text):
 
 # Apply text cleaning
 for name, df in datasets.items():
-    df['Utterance'] = df['Utterance'].apply(clean_text)
+    if df is not None:
+        df['Utterance'] = df['Utterance'].apply(clean_text)
 
 # Split Lex dataset into train/test sets
-lex_data = datasets["Lex"]
+lex_data = pd.read_csv("lex_results.csv")
+lex_data['Utterance'] = lex_data['Utterance'].apply(clean_text)
+
 train_data, lex_test_data = train_test_split(
     lex_data, test_size=0.3, stratify=lex_data['ExpectedIntent'], random_state=42
 )
+datasets["Lex_Test"] = lex_test_data
 
 # Helper function for evaluation
 def evaluate_model(y_true, y_pred, model_name, dataset_name):
@@ -59,17 +63,17 @@ y_train = train_data['ExpectedIntent']
 baseline_model = LogisticRegression(max_iter=1000, random_state=42)
 baseline_model.fit(X_train, y_train)
 
-# Evaluate on all datasets
+# Evaluate on unseen datasets only
 for name, df in datasets.items():
-    X_test = vectorizer.transform(df['Utterance'])
-    y_test = df['ExpectedIntent']
-    y_pred = baseline_model.predict(X_test)
-    results.append(evaluate_model(y_test, y_pred, "Baseline", name))
+    if df is not None:  # Skip train data
+        X_test = vectorizer.transform(df['Utterance'])
+        y_test = df['ExpectedIntent']
+        y_pred = baseline_model.predict(X_test)
+        results.append(evaluate_model(y_test, y_pred, "Baseline", name))
 
 # -----------------
 # RNN Model (TensorFlow)
 # -----------------
-
 # Tokenize and pad sequences
 tokenizer = Tokenizer()
 tokenizer.fit_on_texts(train_data['Utterance'])
@@ -103,22 +107,24 @@ rnn_model.summary()
 # Train the RNN model
 rnn_model.fit(X_train_rnn, y_train_rnn, epochs=5, batch_size=32, validation_split=0.2)
 
-# Evaluate RNN on all datasets
+# Evaluate RNN on unseen datasets only
 for name, df in datasets.items():
-    X_test_rnn, y_test_rnn = prepare_data(df, tokenizer, label_map)
-    y_pred_rnn_probs = rnn_model.predict(X_test_rnn)
-    y_pred_rnn = np.argmax(y_pred_rnn_probs, axis=1)
-    y_pred_rnn_labels = [reverse_label_map[idx] for idx in y_pred_rnn]
-    y_test_rnn_labels = [reverse_label_map[idx] for idx in y_test_rnn]
-    results.append(evaluate_model(y_test_rnn_labels, y_pred_rnn_labels, "RNN", name))
+    if df is not None:  # Skip train data
+        X_test_rnn, y_test_rnn = prepare_data(df, tokenizer, label_map)
+        y_pred_rnn_probs = rnn_model.predict(X_test_rnn)
+        y_pred_rnn = np.argmax(y_pred_rnn_probs, axis=1)
+        y_pred_rnn_labels = [reverse_label_map[idx] for idx in y_pred_rnn]
+        y_test_rnn_labels = [reverse_label_map[idx] for idx in y_test_rnn]
+        results.append(evaluate_model(y_test_rnn_labels, y_pred_rnn_labels, "RNN", name))
 
 # -----------------
 # Vendor Model
 # -----------------
 for name, df in datasets.items():
-    y_true = df['ExpectedIntent']
-    y_pred = df['MappedIntent']  # Vendor predictions are in MappedIntent column
-    results.append(evaluate_model(y_true, y_pred, "Vendor", name))
+    if df is not None:  # Skip train data
+        y_true = df['ExpectedIntent']
+        y_pred = df['MappedIntent']  # Vendor predictions are in MappedIntent column
+        results.append(evaluate_model(y_true, y_pred, "Vendor", name))
 
 # -----------------
 # Create Summary Table
