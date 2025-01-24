@@ -5,13 +5,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Embedding, SimpleRNN, Dense, Input, Masking
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, Input
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.callbacks import EarlyStopping
 
 # Load datasets
 datasets = {
-    "Lex_Test": None,  # Placeholder for Lex test data to exclude from training
+    "Original Dataset Test": None,  # Placeholder for Original Dataset Test data to exclude from training
     "Informal": pd.read_csv("informal_results.csv"),
     "Broken": pd.read_csv("broken_results.csv"),
     "Contextual": pd.read_csv("contextual_results.csv"),
@@ -31,14 +32,14 @@ for name, df in datasets.items():
     if df is not None:
         df['Utterance'] = df['Utterance'].apply(clean_text)
 
-# Split Lex dataset into train/test sets
-lex_data = pd.read_csv("lex_results.csv")
-lex_data['Utterance'] = lex_data['Utterance'].apply(clean_text)
+# Split Original Dataset into train/test sets
+original_data = pd.read_csv("lex_results.csv")
+original_data['Utterance'] = original_data['Utterance'].apply(clean_text)
 
-train_data, lex_test_data = train_test_split(
-    lex_data, test_size=0.3, stratify=lex_data['ExpectedIntent'], random_state=42
+train_data, original_test_data = train_test_split(
+    original_data, test_size=0.3, stratify=original_data['ExpectedIntent'], random_state=42
 )
-datasets["Lex_Test"] = lex_test_data
+datasets["Original Dataset Test"] = original_test_data
 
 # Helper function for evaluation
 def evaluate_model(y_true, y_pred, model_name, dataset_name):
@@ -74,7 +75,7 @@ for name, df in datasets.items():
 # -----------------
 # RNN Model (TensorFlow)
 # -----------------
-# Tokenize and pad sequences
+# Tokenization and padding
 tokenizer = Tokenizer()
 tokenizer.fit_on_texts(train_data['Utterance'])
 
@@ -93,11 +94,31 @@ reverse_label_map = {idx: label for label, idx in label_map.items()}
 
 X_train_rnn, y_train_rnn = prepare_data(train_data, tokenizer, label_map)
 
-# Build the RNN model
+# Load pre-trained GloVe embeddings
+embedding_dim = 100
+glove_path = "glove.6B.100d.txt"  # Update with your path to GloVe embeddings
+embedding_index = {}
+
+with open(glove_path, "r", encoding="utf-8") as f:
+    for line in f:
+        values = line.split()
+        word = values[0]
+        coefs = np.asarray(values[1:], dtype="float32")
+        embedding_index[word] = coefs
+
+# Create embedding matrix
+embedding_matrix = np.zeros((vocab_size, embedding_dim))
+for word, i in tokenizer.word_index.items():
+    embedding_vector = embedding_index.get(word)
+    if embedding_vector is not None:
+        embedding_matrix[i] = embedding_vector
+
+# Build RNN model with pre-trained embeddings
 rnn_model = Sequential([
     Input(shape=(max_len,)),
-    Embedding(input_dim=vocab_size, output_dim=128, mask_zero=True),
-    SimpleRNN(128, return_sequences=False),
+    Embedding(input_dim=vocab_size, output_dim=embedding_dim, weights=[embedding_matrix], input_length=max_len, trainable=False),
+    LSTM(128, return_sequences=False),
+    Dropout(0.5),
     Dense(len(label_map), activation='softmax')
 ])
 
@@ -105,7 +126,14 @@ rnn_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metr
 rnn_model.summary()
 
 # Train the RNN model
-rnn_model.fit(X_train_rnn, y_train_rnn, epochs=5, batch_size=32, validation_split=0.2)
+early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+rnn_model.fit(
+    X_train_rnn, y_train_rnn,
+    epochs=10,
+    batch_size=32,
+    validation_split=0.2,
+    callbacks=[early_stopping]
+)
 
 # Evaluate RNN on unseen datasets only
 for name, df in datasets.items():
