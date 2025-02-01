@@ -1,0 +1,85 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import numpy as np
+
+# Load datasets (assuming each dataset contains the 'NER_Output' column)
+datasets = {
+    "Original Dataset Test": pd.read_csv("lex_results.csv"),
+    "Informal": pd.read_csv("informal_results.csv"),
+    "Broken": pd.read_csv("broken_results.csv"),
+    "Contextual": pd.read_csv("contextual_results.csv"),
+    "Passive": pd.read_csv("passive_results.csv"),
+    "Synonym": pd.read_csv("synonym_results.csv"),
+}
+
+# Process each dataset
+results = []
+all_data = []
+
+for name, df in datasets.items():
+    if "NER_Output" in df.columns:
+        # Convert NER_Output from string to dict and check if 'resolvedValues' list is non-empty
+        df["NER_Success"] = df["NER_Output"].apply(lambda x: bool(eval(x)["resolvedValues"]) if pd.notna(x) else False)
+        
+        # Store individual dataset results
+        success_rate = df["NER_Success"].mean()
+        results.append({"Dataset": name, "NER_Success_Rate": success_rate})
+        
+        # Append dataset with additional columns for later analysis
+        df["Dataset"] = name
+        all_data.append(df)
+
+# Combine all datasets for intent-level analysis
+all_data_df = pd.concat(all_data, ignore_index=True)
+
+# Convert to DataFrame
+results_df = pd.DataFrame(results)
+
+### 1. Overall NER Success Rate (Pie Chart)
+overall_success_rate = all_data_df["NER_Success"].mean()
+plt.figure(figsize=(6, 6))
+plt.pie(
+    [overall_success_rate, 1 - overall_success_rate], 
+    labels=["Success", "Failure"], 
+    autopct="%1.1f%%", 
+    colors=["green", "red"], 
+    startangle=90
+)
+plt.title("Overall NER Success Rate")
+plt.show()
+
+### 2. NER Success Rate per Dataset (Bar Chart)
+plt.figure(figsize=(12, 6))
+sns.barplot(x="Dataset", y="NER_Success_Rate", data=results_df, palette="coolwarm")
+plt.title("NER Success Rate Across Datasets")
+plt.ylabel("Success Rate")
+plt.xlabel("Dataset")
+plt.xticks(rotation=45)
+plt.show()
+
+### 3. NER Success Rate by Expected Intent (Sorted Bar Chart)
+intent_success_rates = all_data_df.groupby("ExpectedIntent")["NER_Success"].mean().reset_index()
+intent_success_rates = intent_success_rates.sort_values(by="NER_Success", ascending=False)
+
+plt.figure(figsize=(12, 6))
+sns.barplot(x="NER_Success", y="ExpectedIntent", data=intent_success_rates, palette="viridis")
+plt.title("NER Success Rate by Expected Intent")
+plt.xlabel("NER Success Rate")
+plt.ylabel("Expected Intent")
+plt.show()
+
+### 4. False Negative & False Positive Analysis (Confusion Matrix)
+# Define expected NER cases (replace with actual logic if needed)
+expected_ner_intents = all_data_df["ExpectedIntent"].apply(lambda x: x in ["Intent1", "Intent2", "Intent3"])  # Replace with actual NER-supported intents
+actual_ner_success = all_data_df["NER_Success"]
+
+# Compute Confusion Matrix
+cm = confusion_matrix(expected_ner_intents, actual_ner_success)
+cm_df = pd.DataFrame(cm, index=["No Expected NER", "Expected NER"], columns=["NER Failed", "NER Succeeded"])
+
+plt.figure(figsize=(6, 5))
+sns.heatmap(cm_df, annot=True, fmt="d", cmap="Blues")
+plt.title("NER Confusion Matrix: Expected vs. Actual")
+plt.show()
