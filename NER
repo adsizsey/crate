@@ -1,7 +1,6 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
 import numpy as np
 
 # Load datasets
@@ -14,93 +13,33 @@ datasets = {
     "Synonym": pd.read_csv("synonym_results.csv"),
 }
 
+# Define bins for utterance length categories
+bins = [0, 5, 10, 15, 20, 25, 30, np.inf]
+bin_labels = ["1-5", "6-10", "11-15", "16-20", "21-25", "26-30", "31+"]
+
+# Initialize plot
+fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharey=True)
+axes = axes.flatten()
+
 # Process each dataset
-results = []
-all_data = []
-
-for name, df in datasets.items():
-    if "MappedIntentSlots" in df.columns:
-        # Convert 'MappedIntentSlots' from string to dict and check if 'resolvedValues' list is non-empty
-        df["NER_Success"] = df["MappedIntentSlots"].apply(lambda x: bool(eval(x)["resolvedValues"]) if pd.notna(x) else False)
-        
-        # Store individual dataset results
-        success_rate = df["NER_Success"].mean()
-        results.append({"Dataset": name, "NER_Success_Rate": success_rate})
-        
-        # Append dataset with additional columns for later analysis
-        df["Dataset"] = name
-        all_data.append(df)
-
-# Combine all datasets for intent-level analysis
-all_data_df = pd.concat(all_data, ignore_index=True)
-
-# Convert to DataFrame
-results_df = pd.DataFrame(results)
-
-### 1. Overall NER Success Rate (Pie Chart)
-overall_success_rate = all_data_df["NER_Success"].mean()
-plt.figure(figsize=(6, 6))
-plt.pie(
-    [overall_success_rate, 1 - overall_success_rate], 
-    labels=["Success", "Failure"], 
-    autopct="%1.1f%%", 
-    colors=["green", "red"], 
-    startangle=90
-)
-plt.title("Overall NER Success Rate")
-plt.show()
-
-### 2. NER Success Rate per Dataset (Bar Chart)
-plt.figure(figsize=(12, 6))
-sns.barplot(x="Dataset", y="NER_Success_Rate", data=results_df, palette="coolwarm")
-plt.title("NER Success Rate Across Datasets")
-plt.ylabel("Success Rate")
-plt.xlabel("Dataset")
-plt.xticks(rotation=45)
-plt.show()
-
-### 3. NER Success Rate by Expected Intent (Filtered by Frequency)
-# Compute frequency of each intent BEFORE sorting
-intent_counts = all_data_df["ExpectedIntent"].value_counts()
-min_intent_threshold = 10  # Only include intents that appear at least this many times
-
-# Filter intents by frequency
-frequent_intents = intent_counts[intent_counts >= min_intent_threshold].index
-filtered_data = all_data_df[all_data_df["ExpectedIntent"].isin(frequent_intents)]
-
-# Compute NER success rates for frequent intents
-intent_success_rates = filtered_data.groupby("ExpectedIntent")["NER_Success"].mean().reset_index()
-
-# Add frequency column before sorting
-intent_success_rates["Count"] = intent_success_rates["ExpectedIntent"].map(intent_counts)
-
-# Sort for better visualization
-intent_success_rates = intent_success_rates.sort_values(by="NER_Success", ascending=False)
-
-# Plot Bar Chart with frequency
-plt.figure(figsize=(12, 6))
-ax = sns.barplot(x="NER_Success", y="ExpectedIntent", data=intent_success_rates, palette="viridis")
-plt.title("NER Success Rate by Expected Intent (Filtered by Frequency)")
-plt.xlabel("NER Success Rate")
-plt.ylabel("Expected Intent")
-
-# Fix text placement: Use correct y positions from `ax.patches`
-for bar, (_, row) in zip(ax.patches, intent_success_rates.iterrows()):
-    ax.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height() / 2, f"n={row['Count']}", 
-            va='center', fontsize=10, color='black')
-
-plt.show()
-
-### 4. False Negative & False Positive Analysis (Confusion Matrix)
-# Define expected NER cases (replace with actual logic if needed)
-expected_ner_intents = filtered_data["ExpectedIntent"].apply(lambda x: x in frequent_intents)
-actual_ner_success = filtered_data["NER_Success"]
-
-# Compute Confusion Matrix
-cm = confusion_matrix(expected_ner_intents, actual_ner_success)
-cm_df = pd.DataFrame(cm, index=["No Expected NER", "Expected NER"], columns=["NER Failed", "NER Succeeded"])
-
-plt.figure(figsize=(6, 5))
-sns.heatmap(cm_df, annot=True, fmt="d", cmap="Blues")
-plt.title("NER Confusion Matrix: Expected vs. Actual")
+for i, (name, df) in enumerate(datasets.items()):
+    # Compute utterance length
+    df["Utterance_Length"] = df["Utterance"].apply(lambda x: len(str(x).split()))
+    
+    # Assign bins
+    df["Length_Bin"] = pd.cut(df["Utterance_Length"], bins=bins, labels=bin_labels)
+    
+    # Compute accuracy per length bin
+    accuracy_per_bin = df.groupby("Length_Bin").apply(lambda x: (x["ExpectedIntent"] == x["MappedIntent"]).mean()).reset_index()
+    accuracy_per_bin.columns = ["Length_Bin", "Accuracy"]
+    
+    # Plot
+    sns.barplot(x="Length_Bin", y="Accuracy", data=accuracy_per_bin, ax=axes[i], palette="coolwarm")
+    axes[i].set_title(f"Accuracy vs Utterance Length ({name})")
+    axes[i].set_xlabel("Utterance Length (Words)")
+    axes[i].set_ylabel("Accuracy")
+    axes[i].set_ylim(0, 1)
+    
+# Adjust layout
+plt.tight_layout()
 plt.show()
