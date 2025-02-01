@@ -84,9 +84,10 @@ plt.title("NER Success Rate by Expected Intent (Filtered by Frequency)")
 plt.xlabel("NER Success Rate")
 plt.ylabel("Expected Intent")
 
-# Add frequency labels at the end of bars
-for index, row in intent_success_rates.iterrows():
-    ax.text(row["NER_Success"] + 0.01, index, f"n={row['Count']}", va='center', fontsize=10, color='black')
+# Fix text placement: Use correct y positions from `ax.patches`
+for bar, (_, row) in zip(ax.patches, intent_success_rates.iterrows()):
+    ax.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height() / 2, f"n={row['Count']}", 
+            va='center', fontsize=10, color='black')
 
 plt.show()
 
