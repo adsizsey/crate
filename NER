@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 import numpy as np
 
-# Load datasets (assuming each dataset contains the 'NER_Output' column)
+# Load datasets
 datasets = {
     "Original Dataset Test": pd.read_csv("lex_results.csv"),
     "Informal": pd.read_csv("informal_results.csv"),
@@ -19,9 +19,9 @@ results = []
 all_data = []
 
 for name, df in datasets.items():
-    if "NER_Output" in df.columns:
-        # Convert NER_Output from string to dict and check if 'resolvedValues' list is non-empty
-        df["NER_Success"] = df["NER_Output"].apply(lambda x: bool(eval(x)["resolvedValues"]) if pd.notna(x) else False)
+    if "MappedIntentSlots" in df.columns:
+        # Convert 'MappedIntentSlots' from string to dict and check if 'resolvedValues' list is non-empty
+        df["NER_Success"] = df["MappedIntentSlots"].apply(lambda x: bool(eval(x)["resolvedValues"]) if pd.notna(x) else False)
         
         # Store individual dataset results
         success_rate = df["NER_Success"].mean()
@@ -59,21 +59,39 @@ plt.xlabel("Dataset")
 plt.xticks(rotation=45)
 plt.show()
 
-### 3. NER Success Rate by Expected Intent (Sorted Bar Chart)
-intent_success_rates = all_data_df.groupby("ExpectedIntent")["NER_Success"].mean().reset_index()
+### 3. NER Success Rate by Expected Intent (Filtered by Frequency)
+# Compute frequency of each intent
+intent_counts = all_data_df["ExpectedIntent"].value_counts()
+min_intent_threshold = 10  # Only include intents that appear at least this many times
+
+# Filter intents by frequency
+frequent_intents = intent_counts[intent_counts >= min_intent_threshold].index
+filtered_data = all_data_df[all_data_df["ExpectedIntent"].isin(frequent_intents)]
+
+# Compute NER success rates for frequent intents
+intent_success_rates = filtered_data.groupby("ExpectedIntent")["NER_Success"].mean().reset_index()
+intent_success_rates["Count"] = intent_success_rates["ExpectedIntent"].map(intent_counts)
+
+# Sort for better visualization
 intent_success_rates = intent_success_rates.sort_values(by="NER_Success", ascending=False)
 
+# Plot Bar Chart with frequency
 plt.figure(figsize=(12, 6))
 sns.barplot(x="NER_Success", y="ExpectedIntent", data=intent_success_rates, palette="viridis")
-plt.title("NER Success Rate by Expected Intent")
+plt.title("NER Success Rate by Expected Intent (Filtered by Frequency)")
 plt.xlabel("NER Success Rate")
 plt.ylabel("Expected Intent")
+
+# Add frequency labels
+for index, row in intent_success_rates.iterrows():
+    plt.text(row["NER_Success"] + 0.01, index, f"{row['Count']}", va='center', fontsize=10)
+
 plt.show()
 
 ### 4. False Negative & False Positive Analysis (Confusion Matrix)
 # Define expected NER cases (replace with actual logic if needed)
-expected_ner_intents = all_data_df["ExpectedIntent"].apply(lambda x: x in ["Intent1", "Intent2", "Intent3"])  # Replace with actual NER-supported intents
-actual_ner_success = all_data_df["NER_Success"]
+expected_ner_intents = filtered_data["ExpectedIntent"].apply(lambda x: x in frequent_intents)
+actual_ner_success = filtered_data["NER_Success"]
 
 # Compute Confusion Matrix
 cm = confusion_matrix(expected_ner_intents, actual_ner_success)
