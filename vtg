@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
 from scipy.stats import ks_2samp
 
-# Load Data (Assumes CSV file format)
-df = data
+# Load Data
+df = pd.read_csv("credit_data_2023.csv")
 
 # Rename columns for easier reference
 df = df.rename(columns={
@@ -23,16 +23,27 @@ df["Default"] = df["Default"].astype(int)  # Ensure default is binary (0/1)
 # Drop missing values if necessary
 df.dropna(subset=["FICO", "Vantage", "Default"], inplace=True)
 
-### 1️⃣ AUC-PR Analysis (FICO vs. Vantage) ###
+# **Invert Scores for Proper Risk Ordering**
+df["FICO_Risk"] = -df["FICO"]
+df["Vantage_Risk"] = -df["Vantage"]
+
+### 1️⃣ AUC-PR & AUC-ROC Analysis (FICO vs. Vantage) ###
 def compute_auc_pr(score_col, label_col):
-    """Computes AUC-PR for a given credit score."""
+    """Computes AUC-PR for a given risk-adjusted credit score."""
     precision, recall, _ = precision_recall_curve(df[label_col], df[score_col])
     auc_pr = auc(recall, precision)
     return auc_pr, precision, recall
 
-# Compute AUC-PR for both scores
-auc_pr_fico, precision_fico, recall_fico = compute_auc_pr("FICO", "Default")
-auc_pr_vantage, precision_vantage, recall_vantage = compute_auc_pr("Vantage", "Default")
+def compute_auc_roc(score_col, label_col):
+    """Computes AUC-ROC for a given risk-adjusted credit score."""
+    return roc_auc_score(df[label_col], df[score_col])
+
+# Compute AUC-PR & AUC-ROC for both scores
+auc_pr_fico, precision_fico, recall_fico = compute_auc_pr("FICO_Risk", "Default")
+auc_pr_vantage, precision_vantage, recall_vantage = compute_auc_pr("Vantage_Risk", "Default")
+
+auc_roc_fico = compute_auc_roc("FICO_Risk", "Default")
+auc_roc_vantage = compute_auc_roc("Vantage_Risk", "Default")
 
 # Plot Precision-Recall Curves
 plt.figure(figsize=(8, 6))
@@ -47,6 +58,8 @@ plt.show()
 
 print(f"AUC-PR (FICO): {auc_pr_fico:.3f}")
 print(f"AUC-PR (Vantage 3.0): {auc_pr_vantage:.3f}")
+print(f"AUC-ROC (FICO): {auc_roc_fico:.3f}")
+print(f"AUC-ROC (Vantage 3.0): {auc_roc_vantage:.3f}")
 
 ### 2️⃣ KS Test (Risk Segmentation Analysis) ###
 def compute_ks_score(score_col, label_col):
@@ -57,8 +70,8 @@ def compute_ks_score(score_col, label_col):
     return ks_stat
 
 # Compute KS scores
-ks_fico = compute_ks_score("FICO", "Default")
-ks_vantage = compute_ks_score("Vantage", "Default")
+ks_fico = compute_ks_score("FICO_Risk", "Default")
+ks_vantage = compute_ks_score("Vantage_Risk", "Default")
 
 print(f"KS Score (FICO): {ks_fico:.3f}")
 print(f"KS Score (Vantage 3.0): {ks_vantage:.3f}")
