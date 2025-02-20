@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
+from sklearn.metrics import precision_recall_curve, auc, roc_auc_score, roc_curve
 from scipy.stats import ks_2samp
 
 # Load Data
-df = data
+df = pd.read_csv("credit_data_2023.csv")
 
 # Rename columns for easier reference
 df = df.rename(columns={
@@ -17,17 +17,19 @@ df = df.rename(columns={
 })
 
 # Ensure data types are correct
-df["Vintage"] = pd.to_datetime(df["Vintage"], errors="coerce")  # Convert vintage to datetime
 df["Default"] = df["Default"].astype(int)  # Ensure default is binary (0/1)
 
-# Drop missing values if necessary
-df.dropna(subset=["FICO", "Vantage", "Default"], inplace=True)
+# ✅ **Fix Vintage Format (YYYY_MM to datetime)**
+df["Vintage"] = pd.to_datetime(df["Vintage"], format="%Y_%m", errors="coerce")
 
-# **Invert Scores for Proper Risk Ordering**
+# Drop missing values if necessary
+df.dropna(subset=["FICO", "Vantage", "Default", "Vintage"], inplace=True)
+
+# ✅ **Invert Scores for Proper Risk Ordering**
 df["FICO_Risk"] = -df["FICO"]
 df["Vantage_Risk"] = -df["Vantage"]
 
-### 1️⃣ AUC-PR & AUC-ROC Analysis (FICO vs. Vantage) ###
+### 1️⃣ Adjusted AUC-PR & AUC-ROC for Imbalanced Data ###
 def compute_auc_pr(score_col, label_col):
     """Computes AUC-PR for a given risk-adjusted credit score."""
     precision, recall, _ = precision_recall_curve(df[label_col], df[score_col])
@@ -36,22 +38,37 @@ def compute_auc_pr(score_col, label_col):
 
 def compute_auc_roc(score_col, label_col):
     """Computes AUC-ROC for a given risk-adjusted credit score."""
-    return roc_auc_score(df[label_col], df[score_col])
+    fpr, tpr, _ = roc_curve(df[label_col], df[score_col])
+    auc_roc = roc_auc_score(df[label_col], df[score_col])
+    return auc_roc, fpr, tpr
 
 # Compute AUC-PR & AUC-ROC for both scores
 auc_pr_fico, precision_fico, recall_fico = compute_auc_pr("FICO_Risk", "Default")
 auc_pr_vantage, precision_vantage, recall_vantage = compute_auc_pr("Vantage_Risk", "Default")
 
-auc_roc_fico = compute_auc_roc("FICO_Risk", "Default")
-auc_roc_vantage = compute_auc_roc("Vantage_Risk", "Default")
+auc_roc_fico, fpr_fico, tpr_fico = compute_auc_roc("FICO_Risk", "Default")
+auc_roc_vantage, fpr_vantage, tpr_vantage = compute_auc_roc("Vantage_Risk", "Default")
 
-# Plot Precision-Recall Curves
-plt.figure(figsize=(8, 6))
-plt.plot(recall_fico, precision_fico, label=f"FICO (AUC-PR = {auc_pr_fico:.3f})")
-plt.plot(recall_vantage, precision_vantage, label=f"Vantage (AUC-PR = {auc_pr_vantage:.3f})")
+# ✅ **Fix PR Curve for Better Visibility (Logarithmic Scaling for Precision)**
+plt.figure(figsize=(10, 5))
+plt.step(recall_fico, precision_fico, where="post", label=f"FICO (AUC-PR = {auc_pr_fico:.3f})")
+plt.step(recall_vantage, precision_vantage, where="post", label=f"Vantage (AUC-PR = {auc_pr_vantage:.3f})")
+plt.xscale("log")  # Log scale for better visibility on imbalanced data
 plt.xlabel("Recall")
 plt.ylabel("Precision")
-plt.title("Precision-Recall Curve: FICO vs. Vantage 3.0")
+plt.title("Precision-Recall Curve (Log Scale) - FICO vs. Vantage 3.0")
+plt.legend()
+plt.grid()
+plt.show()
+
+# ✅ **Add ROC Curve**
+plt.figure(figsize=(10, 5))
+plt.plot(fpr_fico, tpr_fico, label=f"FICO (AUC-ROC = {auc_roc_fico:.3f})")
+plt.plot(fpr_vantage, tpr_vantage, label=f"Vantage (AUC-ROC = {auc_roc_vantage:.3f})")
+plt.plot([0, 1], [0, 1], linestyle="--", color="gray")  # Random guess line
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve: FICO vs. Vantage 3.0")
 plt.legend()
 plt.grid()
 plt.show()
@@ -61,7 +78,7 @@ print(f"AUC-PR (Vantage 3.0): {auc_pr_vantage:.3f}")
 print(f"AUC-ROC (FICO): {auc_roc_fico:.3f}")
 print(f"AUC-ROC (Vantage 3.0): {auc_roc_vantage:.3f}")
 
-### 2️⃣ KS Test (Risk Segmentation Analysis) ###
+### 2️⃣ Adjusted KS Test for Imbalanced Data ###
 def compute_ks_score(score_col, label_col):
     """Computes KS statistic for a given credit score."""
     good = df[df[label_col] == 0][score_col]
@@ -76,22 +93,25 @@ ks_vantage = compute_ks_score("Vantage_Risk", "Default")
 print(f"KS Score (FICO): {ks_fico:.3f}")
 print(f"KS Score (Vantage 3.0): {ks_vantage:.3f}")
 
-### 3️⃣ Score Distribution Analysis ###
+### 3️⃣ Adjusted Score Distribution Analysis with Stratified Bins ###
+bins = np.linspace(df["FICO"].min(), df["FICO"].max(), 10)
+df["FICO_bin"] = pd.cut(df["FICO"], bins=bins, labels=False)
+df["Vantage_bin"] = pd.cut(df["Vantage"], bins=bins, labels=False)
+
+# Plot Score Distribution
 plt.figure(figsize=(10, 6))
-sns.kdeplot(df[df["Default"] == 0]["FICO"], label="FICO - Non-Default", shade=True)
-sns.kdeplot(df[df["Default"] == 1]["FICO"], label="FICO - Default", shade=True)
-sns.kdeplot(df[df["Default"] == 0]["Vantage"], label="Vantage - Non-Default", shade=True)
-sns.kdeplot(df[df["Default"] == 1]["Vantage"], label="Vantage - Default", shade=True)
+sns.histplot(df, x="FICO", hue="Default", bins=10, kde=True, stat="density", common_norm=False, alpha=0.5)
+sns.histplot(df, x="Vantage", hue="Default", bins=10, kde=True, stat="density", common_norm=False, alpha=0.5)
 plt.axvline(x=660, color="red", linestyle="--", label="Threshold = 660")
 plt.xlabel("Credit Score")
 plt.ylabel("Density")
-plt.title("Score Distribution for Defaults vs. Non-Defaults")
-plt.legend()
+plt.title("Score Distribution with Stratified Bins (Imbalanced Data)")
+plt.legend(["Threshold = 660", "FICO", "Vantage"])
 plt.grid()
 plt.show()
 
-### 4️⃣ Vintage-Based Default Rate Analysis ###
-# Aggregate default rates per vintage
+### 4️⃣ Adjusted Vintage-Based Default Rate Analysis ###
+# ✅ **Fix Vintage Analysis to Use Proper Datetime Format**
 vintage_analysis = df.groupby(df["Vintage"].dt.to_period("M"))["Default"].mean().reset_index()
 vintage_analysis["Vintage"] = vintage_analysis["Vintage"].astype(str)  # Convert Period to String
 
