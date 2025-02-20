@@ -6,7 +6,7 @@ from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
 from scipy.stats import ks_2samp
 
 # Load Data
-df = pd.read_csv("credit_data_2023.csv")
+df = data
 
 # Rename columns for easier reference
 df = df.rename(columns={
