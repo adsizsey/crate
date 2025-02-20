@@ -1,0 +1,94 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
+from scipy.stats import ks_2samp
+
+# Load Data (Assumes CSV file format)
+df = data
+
+# Rename columns for easier reference
+df = df.rename(columns={
+    "Vintage": "Vintage",
+    "dpd60plus_in_12_chg_bk": "Default",
+    "ACQ_FICO": "FICO",
+    "VANTAGE3_SCORE": "Vantage"
+})
+
+# Ensure data types are correct
+df["Vintage"] = pd.to_datetime(df["Vintage"], errors="coerce")  # Convert vintage to datetime
+df["Default"] = df["Default"].astype(int)  # Ensure default is binary (0/1)
+
+# Drop missing values if necessary
+df.dropna(subset=["FICO", "Vantage", "Default"], inplace=True)
+
+### 1️⃣ AUC-PR Analysis (FICO vs. Vantage) ###
+def compute_auc_pr(score_col, label_col):
+    """Computes AUC-PR for a given credit score."""
+    precision, recall, _ = precision_recall_curve(df[label_col], df[score_col])
+    auc_pr = auc(recall, precision)
+    return auc_pr, precision, recall
+
+# Compute AUC-PR for both scores
+auc_pr_fico, precision_fico, recall_fico = compute_auc_pr("FICO", "Default")
+auc_pr_vantage, precision_vantage, recall_vantage = compute_auc_pr("Vantage", "Default")
+
+# Plot Precision-Recall Curves
+plt.figure(figsize=(8, 6))
+plt.plot(recall_fico, precision_fico, label=f"FICO (AUC-PR = {auc_pr_fico:.3f})")
+plt.plot(recall_vantage, precision_vantage, label=f"Vantage (AUC-PR = {auc_pr_vantage:.3f})")
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Precision-Recall Curve: FICO vs. Vantage 3.0")
+plt.legend()
+plt.grid()
+plt.show()
+
+print(f"AUC-PR (FICO): {auc_pr_fico:.3f}")
+print(f"AUC-PR (Vantage 3.0): {auc_pr_vantage:.3f}")
+
+### 2️⃣ KS Test (Risk Segmentation Analysis) ###
+def compute_ks_score(score_col, label_col):
+    """Computes KS statistic for a given credit score."""
+    good = df[df[label_col] == 0][score_col]
+    bad = df[df[label_col] == 1][score_col]
+    ks_stat, p_value = ks_2samp(good, bad)
+    return ks_stat
+
+# Compute KS scores
+ks_fico = compute_ks_score("FICO", "Default")
+ks_vantage = compute_ks_score("Vantage", "Default")
+
+print(f"KS Score (FICO): {ks_fico:.3f}")
+print(f"KS Score (Vantage 3.0): {ks_vantage:.3f}")
+
+### 3️⃣ Score Distribution Analysis ###
+plt.figure(figsize=(10, 6))
+sns.kdeplot(df[df["Default"] == 0]["FICO"], label="FICO - Non-Default", shade=True)
+sns.kdeplot(df[df["Default"] == 1]["FICO"], label="FICO - Default", shade=True)
+sns.kdeplot(df[df["Default"] == 0]["Vantage"], label="Vantage - Non-Default", shade=True)
+sns.kdeplot(df[df["Default"] == 1]["Vantage"], label="Vantage - Default", shade=True)
+plt.axvline(x=660, color="red", linestyle="--", label="Threshold = 660")
+plt.xlabel("Credit Score")
+plt.ylabel("Density")
+plt.title("Score Distribution for Defaults vs. Non-Defaults")
+plt.legend()
+plt.grid()
+plt.show()
+
+### 4️⃣ Vintage-Based Default Rate Analysis ###
+# Aggregate default rates per vintage
+vintage_analysis = df.groupby(df["Vintage"].dt.to_period("M"))["Default"].mean().reset_index()
+vintage_analysis["Vintage"] = vintage_analysis["Vintage"].astype(str)  # Convert Period to String
+
+plt.figure(figsize=(10, 5))
+sns.lineplot(x="Vintage", y="Default", data=vintage_analysis, marker="o")
+plt.xticks(rotation=45)
+plt.xlabel("Vintage")
+plt.ylabel("Default Rate")
+plt.title("Default Rate by Vintage")
+plt.grid()
+plt.show()
+
+print("Vintage Default Rate Analysis Completed.")
