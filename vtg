@@ -2,13 +2,14 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve, auc, roc_auc_score, roc_curve
-from scipy.stats import ks_2samp
+from scipy.stats import ks_2samp, spearmanr
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, roc_curve
 
 # Load Data
 df = pd.read_csv("credit_data_2023.csv")
 
-# Rename columns for easier reference
+# Rename columns for clarity
 df = df.rename(columns={
     "Vintage": "Vintage",
     "dpd60plus_in_12_chg_bk": "Default",
@@ -16,52 +17,31 @@ df = df.rename(columns={
     "VANTAGE3_SCORE": "Vantage"
 })
 
-# Ensure data types are correct
-df["Default"] = df["Default"].astype(int)  # Ensure default is binary (0/1)
-
-# ✅ **Fix Vintage Format (YYYY_MM to datetime)**
+# Data Cleaning
+df["Default"] = df["Default"].astype(int)
 df["Vintage"] = pd.to_datetime(df["Vintage"], format="%Y_%m", errors="coerce")
-
-# Drop missing values if necessary
 df.dropna(subset=["FICO", "Vantage", "Default", "Vintage"], inplace=True)
 
 # ✅ **Invert Scores for Proper Risk Ordering**
 df["FICO_Risk"] = -df["FICO"]
 df["Vantage_Risk"] = -df["Vantage"]
 
-### 1️⃣ Adjusted AUC-PR & AUC-ROC for Imbalanced Data ###
-def compute_auc_pr(score_col, label_col):
-    """Computes AUC-PR for a given risk-adjusted credit score."""
-    precision, recall, _ = precision_recall_curve(df[label_col], df[score_col])
-    auc_pr = auc(recall, precision)
-    return auc_pr, precision, recall
+### **1️⃣ AUC-ROC & Gini Coefficient for Risk Ranking**
+def compute_auc_roc(score_col):
+    fpr, tpr, _ = roc_curve(df["Default"], df[score_col])
+    return roc_auc_score(df["Default"], df[score_col]), fpr, tpr
 
-def compute_auc_roc(score_col, label_col):
-    """Computes AUC-ROC for a given risk-adjusted credit score."""
-    fpr, tpr, _ = roc_curve(df[label_col], df[score_col])
-    auc_roc = roc_auc_score(df[label_col], df[score_col])
-    return auc_roc, fpr, tpr
+def gini(y_true, y_scores):
+    """Compute Gini coefficient for risk ranking quality"""
+    return 2 * roc_auc_score(y_true, y_scores) - 1
 
-# Compute AUC-PR & AUC-ROC for both scores
-auc_pr_fico, precision_fico, recall_fico = compute_auc_pr("FICO_Risk", "Default")
-auc_pr_vantage, precision_vantage, recall_vantage = compute_auc_pr("Vantage_Risk", "Default")
+auc_roc_fico, fpr_fico, tpr_fico = compute_auc_roc("FICO_Risk")
+auc_roc_vantage, fpr_vantage, tpr_vantage = compute_auc_roc("Vantage_Risk")
 
-auc_roc_fico, fpr_fico, tpr_fico = compute_auc_roc("FICO_Risk", "Default")
-auc_roc_vantage, fpr_vantage, tpr_vantage = compute_auc_roc("Vantage_Risk", "Default")
+gini_fico = gini(df["Default"], df["FICO"])
+gini_vantage = gini(df["Default"], df["Vantage"])
 
-# ✅ **Fix PR Curve for Better Visibility (Logarithmic Scaling for Precision)**
-plt.figure(figsize=(10, 5))
-plt.step(recall_fico, precision_fico, where="post", label=f"FICO (AUC-PR = {auc_pr_fico:.3f})")
-plt.step(recall_vantage, precision_vantage, where="post", label=f"Vantage (AUC-PR = {auc_pr_vantage:.3f})")
-plt.xscale("log")  # Log scale for better visibility on imbalanced data
-plt.xlabel("Recall")
-plt.ylabel("Precision")
-plt.title("Precision-Recall Curve (Log Scale) - FICO vs. Vantage 3.0")
-plt.legend()
-plt.grid()
-plt.show()
-
-# ✅ **Add ROC Curve**
+# ✅ **Plot ROC Curve**
 plt.figure(figsize=(10, 5))
 plt.plot(fpr_fico, tpr_fico, label=f"FICO (AUC-ROC = {auc_roc_fico:.3f})")
 plt.plot(fpr_vantage, tpr_vantage, label=f"Vantage (AUC-ROC = {auc_roc_vantage:.3f})")
@@ -73,50 +53,40 @@ plt.legend()
 plt.grid()
 plt.show()
 
-print(f"AUC-PR (FICO): {auc_pr_fico:.3f}")
-print(f"AUC-PR (Vantage 3.0): {auc_pr_vantage:.3f}")
-print(f"AUC-ROC (FICO): {auc_roc_fico:.3f}")
-print(f"AUC-ROC (Vantage 3.0): {auc_roc_vantage:.3f}")
+### **2️⃣ KS Test for Risk Segmentation**
+def compute_ks(score_col):
+    good = df[df["Default"] == 0][score_col]
+    bad = df[df["Default"] == 1][score_col]
+    return ks_2samp(good, bad)[0]
 
-### 2️⃣ Adjusted KS Test for Imbalanced Data ###
-def compute_ks_score(score_col, label_col):
-    """Computes KS statistic for a given credit score."""
-    good = df[df[label_col] == 0][score_col]
-    bad = df[df[label_col] == 1][score_col]
-    ks_stat, p_value = ks_2samp(good, bad)
-    return ks_stat
+ks_fico, ks_vantage = compute_ks("FICO_Risk"), compute_ks("Vantage_Risk")
 
-# Compute KS scores
-ks_fico = compute_ks_score("FICO_Risk", "Default")
-ks_vantage = compute_ks_score("Vantage_Risk", "Default")
+### **3️⃣ Default Rate by Score Buckets**
+fico_bins = [300, 580, 620, 660, 700, 750, 800, 850]
+df["FICO_Bucket"] = pd.cut(df["FICO"], bins=fico_bins, labels=fico_bins[:-1])
 
-print(f"KS Score (FICO): {ks_fico:.3f}")
-print(f"KS Score (Vantage 3.0): {ks_vantage:.3f}")
+vantage_bins = [300, 600, 650, 700, 750, 800, 850]
+df["Vantage_Bucket"] = pd.cut(df["Vantage"], bins=vantage_bins, labels=vantage_bins[:-1])
 
-### 3️⃣ Adjusted Score Distribution Analysis with Stratified Bins ###
-bins = np.linspace(df["FICO"].min(), df["FICO"].max(), 10)
-df["FICO_bin"] = pd.cut(df["FICO"], bins=bins, labels=False)
-df["Vantage_bin"] = pd.cut(df["Vantage"], bins=bins, labels=False)
+fico_default_rates = df.groupby("FICO_Bucket")["Default"].mean()
+vantage_default_rates = df.groupby("Vantage_Bucket")["Default"].mean()
 
-# Plot Score Distribution
-plt.figure(figsize=(10, 6))
-sns.histplot(df, x="FICO", hue="Default", bins=10, kde=True, stat="density", common_norm=False, alpha=0.5)
-sns.histplot(df, x="Vantage", hue="Default", bins=10, kde=True, stat="density", common_norm=False, alpha=0.5)
-plt.axvline(x=660, color="red", linestyle="--", label="Threshold = 660")
-plt.xlabel("Credit Score")
-plt.ylabel("Density")
-plt.title("Score Distribution with Stratified Bins (Imbalanced Data)")
-plt.legend(["Threshold = 660", "FICO", "Vantage"])
+# ✅ **Plot Default Rate by Score Buckets**
+plt.figure(figsize=(10, 5))
+plt.plot(fico_default_rates, marker="o", label="FICO", color="blue")
+plt.plot(vantage_default_rates, marker="s", label="Vantage 3.0", color="red")
+plt.xlabel("Score Buckets")
+plt.ylabel("Default Rate")
+plt.title("Risk Slope: Default Rate by Score Buckets")
+plt.legend()
 plt.grid()
 plt.show()
 
-### 4️⃣ Adjusted Vintage-Based Default Rate Analysis ###
-# ✅ **Fix Vintage Analysis to Use Proper Datetime Format**
-vintage_analysis = df.groupby(df["Vintage"].dt.to_period("M"))["Default"].mean().reset_index()
-vintage_analysis["Vintage"] = vintage_analysis["Vintage"].astype(str)  # Convert Period to String
+### **4️⃣ Vintage-Based Default Rate Trends**
+vintage_defaults = df.groupby(df["Vintage"].dt.to_period("M"))["Default"].mean().reset_index()
 
 plt.figure(figsize=(10, 5))
-sns.lineplot(x="Vintage", y="Default", data=vintage_analysis, marker="o")
+sns.lineplot(x="Vintage", y="Default", data=vintage_defaults, marker="o")
 plt.xticks(rotation=45)
 plt.xlabel("Vintage")
 plt.ylabel("Default Rate")
@@ -124,4 +94,50 @@ plt.title("Default Rate by Vintage")
 plt.grid()
 plt.show()
 
-print("Vintage Default Rate Analysis Completed.")
+### **5️⃣ Score Distribution Shifts Over Time**
+fico_distribution = df.groupby(["Vintage", "FICO_Bucket"]).size().unstack()
+vantage_distribution = df.groupby(["Vintage", "Vantage_Bucket"]).size().unstack()
+
+plt.figure(figsize=(12, 6))
+fico_distribution.plot(kind="line", marker="o", colormap="coolwarm", title="FICO Score Distribution Over Time")
+plt.ylabel("Number of Loans")
+plt.xticks(rotation=45)
+plt.grid()
+plt.show()
+
+plt.figure(figsize=(12, 6))
+vantage_distribution.plot(kind="line", marker="o", colormap="coolwarm", title="Vantage Score Distribution Over Time")
+plt.ylabel("Number of Loans")
+plt.xticks(rotation=45)
+plt.grid()
+plt.show()
+
+### **6️⃣ PSI (Population Stability Index) for Score Buckets**
+def compute_psi(base, current, bins=10):
+    """Computes Population Stability Index (PSI) for score distributions."""
+    base_dist = base.value_counts(normalize=True, bins=bins).sort_index()
+    current_dist = current.value_counts(normalize=True, bins=bins).sort_index()
+
+    psi_values = (current_dist - base_dist) * np.log(current_dist / base_dist)
+    return psi_values.sum()
+
+base_period = df[df["Vintage"] < "2023-06"]["FICO"]
+current_period = df[df["Vintage"] >= "2023-06"]["FICO"]
+
+psi_fico = compute_psi(base_period, current_period)
+
+### **7️⃣ Logistic Regression Monotonicity Test**
+X_fico, X_vantage, y = df[["FICO"]], df[["Vantage"]], df["Default"]
+
+logit_fico = LogisticRegression().fit(X_fico, y)
+logit_vantage = LogisticRegression().fit(X_vantage, y)
+
+auc_fico = roc_auc_score(y, logit_fico.predict_proba(X_fico)[:, 1])
+auc_vantage = roc_auc_score(y, logit_vantage.predict_proba(X_vantage)[:, 1])
+
+### **🚀 Summary of Results**
+print(f"AUC-ROC (FICO): {auc_roc_fico:.3f}, AUC-ROC (Vantage): {auc_roc_vantage:.3f}")
+print(f"Gini Coefficient (FICO): {gini_fico:.3f}, Gini Coefficient (Vantage): {gini_vantage:.3f}")
+print(f"KS Score (FICO): {ks_fico:.3f}, KS Score (Vantage): {ks_vantage:.3f}")
+print(f"PSI Score (FICO vs. Vantage): {psi_fico:.3f}")
+print(f"Logistic Regression AUC (FICO): {auc_fico:.3f}, AUC (Vantage): {auc_vantage:.3f}")
