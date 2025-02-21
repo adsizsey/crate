@@ -1,0 +1,51 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy.stats import spearmanr
+
+# Load Data
+df = pd.read_csv("credit_data_2023.csv")
+
+# Rename columns
+df = df.rename(columns={
+    "Vintage": "Vintage",
+    "dpd60plus_in_12_chg_bk": "Default",
+    "VANTAGE3_SCORE": "Vantage"
+})
+
+df["Default"] = df["Default"].astype(int)
+df.dropna(subset=["Vantage", "Default"], inplace=True)
+
+# ✅ **Define Vantage Score Buckets**
+vantage_bins = [300, 600, 650, 700, 750, 800, 850]
+df["Vantage_Bucket"] = pd.cut(df["Vantage"], bins=vantage_bins, labels=vantage_bins[:-1])
+
+# ✅ **Compute Default Rate per Score Bucket**
+vantage_default_rates = df.groupby("Vantage_Bucket")["Default"].mean()
+
+# ✅ **Plot Default Rate by Score Buckets**
+plt.figure(figsize=(10, 5))
+plt.plot(vantage_default_rates, marker="o", linestyle="-", color="red", label="Vantage 3.0 Default Rate")
+plt.xlabel("Vantage 3.0 Score Buckets")
+plt.ylabel("Default Rate")
+plt.title("Risk Slope: Default Rate by Vantage 3.0 Score Buckets")
+plt.legend()
+plt.grid()
+plt.show()
+
+# ✅ **First Difference Test (Monotonicity Violations Count)**
+def check_monotonicity(default_rates):
+    """Checks if default rates increase at any point in the score range (monotonicity test)."""
+    diffs = np.diff(default_rates.values)  # Compute difference between consecutive bins
+    monotonic_violations = np.sum(diffs > 0)  # Count how many times default rate increases
+    return monotonic_violations
+
+vantage_monotonic_violations = check_monotonicity(vantage_default_rates)
+
+# ✅ **Spearman Rank Correlation Test**
+spearman_vantage, _ = spearmanr(df["Vantage"], df["Default"])
+
+# ✅ **Print Results**
+print(f"Spearman Correlation (Vantage 3.0): {spearman_vantage:.3f}")
+print(f"Monotonicity Violations (Vantage 3.0): {vantage_monotonic_violations}")
