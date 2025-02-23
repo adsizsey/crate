@@ -1,0 +1,55 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
+
+# Load Data
+df = pd.read_csv("credit_data_2023.csv")
+
+# Rename Columns for Consistency
+df = df.rename(columns={
+    "dpd60plus_in_12_chg_bk": "Default",
+    "VANTAGE3_SCORE": "Vantage",
+    "ACQ_FICO": "FICO"
+})
+
+df["Default"] = df["Default"].astype(int)
+df.dropna(subset=["Vantage", "FICO", "Default"], inplace=True)
+
+# ✅ **Step 1: Compute Original AUC**
+X = df[["FICO", "Vantage"]]
+y = df["Default"]
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+model = LogisticRegression(max_iter=1000).fit(X_train, y_train)
+
+original_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+print(f"✅ Original AUC: {original_auc:.3f}")
+
+# ✅ **Step 2: Flip Some Non-Events to Events**
+flip_rate = 0.03  # Flip 3% of non-defaulters
+non_events = df[df["Default"] == 0].sample(frac=flip_rate, random_state=42)  # Sample from non-defaulters
+df.loc[non_events.index, "Default"] = 1  # Convert to defaulters
+
+# ✅ **Step 3: Compute AUC After Flipping**
+X_train, X_test, y_train, y_test = train_test_split(X, df["Default"], test_size=0.3, random_state=42)
+model_flipped = LogisticRegression(max_iter=1000).fit(X_train, y_train)
+
+flipped_auc = roc_auc_score(y_test, model_flipped.predict_proba(X_test)[:, 1])
+print(f"✅ AUC After Flipping 3% of Non-Events: {flipped_auc:.3f}")
+
+# ✅ **Step 4: Compare AUC Change**
+auc_change = original_auc - flipped_auc
+print(f"⚠️ AUC Change After Flipping: {auc_change:.3f}")
+
+# ✅ **Store Results in a Table**
+import ace_tools as tools  
+
+results_df = pd.DataFrame({
+    "Test Type": ["Original AUC", "After Flipping 3% Non-Events"],
+    "AUC": [original_auc, flipped_auc],
+    "AUC Change": [0, auc_change]
+})
+
+tools.display_dataframe_to_user(name="AUC Sensitivity Test", dataframe=results_df)
