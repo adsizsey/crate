@@ -1,0 +1,66 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
+
+# ✅ **Define FICO Segments**
+fico_bins = [660, 700, 740, 850]  
+fico_labels = ["660-699", "700-739", "740+"]  
+df["FICO_Segment"] = pd.cut(df["FICO"], bins=fico_bins, labels=fico_labels, include_lowest=True)
+
+# ✅ **Initialize Results Storage**
+results = []
+
+# ✅ **Loop Through Each FICO Segment**
+for segment in fico_labels:
+    segment_df = df[df["FICO_Segment"] == segment].copy()
+    
+    if segment_df.shape[0] < 100:  # Skip small segments to avoid unreliable AUCs
+        continue
+    
+    # **Step 1: Linear Regression to Compute Residuals**
+    X = segment_df[["FICO"]]
+    y = segment_df["Vantage"]
+    
+    lin_reg = LinearRegression()
+    lin_reg.fit(X, y)
+    
+    r_squared = lin_reg.score(X, y)
+    segment_df["Residuals"] = y - lin_reg.predict(X)
+
+    # **Step 2: Logistic Regression Models for Default Prediction**
+    X_full = segment_df[["FICO", "Vantage"]]
+    X_base = segment_df[["FICO"]]
+    X_residual = segment_df[["Residuals"]]
+    y = segment_df["Default"]
+
+    # Train-Test Split
+    X_train_full, X_test_full, y_train, y_test = train_test_split(X_full, y, test_size=0.3, random_state=42)
+    X_train_base, X_test_base, _, _ = train_test_split(X_base, y, test_size=0.3, random_state=42)
+    X_train_residual, X_test_residual, _, _ = train_test_split(X_residual, y, test_size=0.3, random_state=42)
+
+    # Fit Logistic Regression
+    log_reg_full = LogisticRegression(max_iter=1000).fit(X_train_full, y_train)
+    log_reg_base = LogisticRegression(max_iter=1000).fit(X_train_base, y_train)
+    log_reg_residual = LogisticRegression(max_iter=1000).fit(X_train_residual, y_train)
+
+    # Compute AUC Scores
+    auc_full = roc_auc_score(y_test, log_reg_full.predict_proba(X_test_full)[:, 1])
+    auc_base = roc_auc_score(y_test, log_reg_base.predict_proba(X_test_base)[:, 1])
+    auc_residual = roc_auc_score(y_test, log_reg_residual.predict_proba(X_test_residual)[:, 1])
+
+    # **Store Results**
+    results.append({
+        "FICO Segment": segment,
+        "R²": round(r_squared, 3),
+        "AUC-Residual": round(auc_residual, 3),
+        "AUC-Full Model": round(auc_full, 3),
+        "AUC-Base Model": round(auc_base, 3)
+    })
+
+# ✅ **Convert to DataFrame and Display**
+results_df = pd.DataFrame(results)
+
+import ace_tools_open as tools
+tools.display_dataframe_to_user(name="Orthogonal Lift Analysis by FICO Segments", dataframe=results_df)
