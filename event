@@ -1,55 +1,46 @@
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
 
-# Load Data
-df = pd.read_csv("credit_data_2023.csv")
+# ✅ **Step 1: Compute Original AUC Using Negative Vantage3 Scores**
+original_auc = roc_auc_score(df["Default"], -df["Vantage"])  # Flip scores
+print(f"✅ Original AUC (Before Flipping): {original_auc:.3f}")
 
-# Rename Columns for Consistency
-df = df.rename(columns={
-    "dpd60plus_in_12_chg_bk": "Default",
-    "VANTAGE3_SCORE": "Vantage",
-    "ACQ_FICO": "FICO"
-})
+# ✅ **Step 2: Define Sampling Strategies (Fixed 3% Sample Size)**
+sample_size = int(len(df) * 0.03)  # 3% of the full dataset
 
-df["Default"] = df["Default"].astype(int)
-df.dropna(subset=["Vantage", "FICO", "Default"], inplace=True)
+# Define different sampling groups
+non_defaulters = df[df["Default"] == 0]  # Only selecting from non-defaulters
+random_sample = non_defaulters.sample(n=sample_size, random_state=42)
+lowest_50_sample = non_defaulters.nsmallest(int(len(non_defaulters) * 0.50), "Vantage").sample(n=sample_size, random_state=42)
+lowest_20_sample = non_defaulters.nsmallest(int(len(non_defaulters) * 0.20), "Vantage").sample(n=sample_size, random_state=42)
+lowest_10_sample = non_defaulters.nsmallest(int(len(non_defaulters) * 0.10), "Vantage").sample(n=sample_size, random_state=42)
 
-# ✅ **Step 1: Compute Original AUC**
-X = df[["FICO", "Vantage"]]
-y = df["Default"]
+# ✅ **Step 3: Define Scenarios**
+sampling_strategies = {
+    "Random (3%)": random_sample,
+    "Lowest 50% (3%)": lowest_50_sample,
+    "Lowest 20% (3%)": lowest_20_sample,
+    "Lowest 10% (3%)": lowest_10_sample
+}
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-model = LogisticRegression(max_iter=1000).fit(X_train, y_train)
+results = []
 
-original_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
-print(f"✅ Original AUC: {original_auc:.3f}")
+# ✅ **Step 4: Loop Through Strategies and Compute AUC**
+for strategy, sampled_df in sampling_strategies.items():
+    df_flipped = df.copy()
+    df_flipped.loc[sampled_df.index, "Default"] = 1  # Convert selected non-defaulters to defaulters
 
-# ✅ **Step 2: Flip Some Non-Events to Events**
-flip_rate = 0.03  # Flip 3% of non-defaulters
-non_events = df[df["Default"] == 0].sample(frac=flip_rate, random_state=42)  # Sample from non-defaulters
-df.loc[non_events.index, "Default"] = 1  # Convert to defaulters
+    flipped_auc = roc_auc_score(df_flipped["Default"], -df_flipped["Vantage"])  # Use negative Vantage3
+    auc_change = original_auc - flipped_auc
 
-# ✅ **Step 3: Compute AUC After Flipping**
-X_train, X_test, y_train, y_test = train_test_split(X, df["Default"], test_size=0.3, random_state=42)
-model_flipped = LogisticRegression(max_iter=1000).fit(X_train, y_train)
+    print(f"⚠️ AUC After Flipping ({strategy}): {flipped_auc:.3f}")
+    print(f"⚠️ AUC Change ({strategy}): {auc_change:.3f}")
 
-flipped_auc = roc_auc_score(y_test, model_flipped.predict_proba(X_test)[:, 1])
-print(f"✅ AUC After Flipping 3% of Non-Events: {flipped_auc:.3f}")
+    results.append({"Sampling Strategy": strategy, "AUC After Flipping": flipped_auc, "AUC Change": auc_change})
 
-# ✅ **Step 4: Compare AUC Change**
-auc_change = original_auc - flipped_auc
-print(f"⚠️ AUC Change After Flipping: {auc_change:.3f}")
-
-# ✅ **Store Results in a Table**
+# ✅ **Step 5: Store Results in Table**
 import ace_tools as tools  
 
-results_df = pd.DataFrame({
-    "Test Type": ["Original AUC", "After Flipping 3% Non-Events"],
-    "AUC": [original_auc, flipped_auc],
-    "AUC Change": [0, auc_change]
-})
-
-tools.display_dataframe_to_user(name="AUC Sensitivity Test", dataframe=results_df)
+results_df = pd.DataFrame(results)
+tools.display_dataframe_to_user(name="AUC Sensitivity Test (Corrected for Score Direction)", dataframe=results_df)
