@@ -1,0 +1,20 @@
+import requests
+
+url = "https://your.model.endpoint.com/api"
+# Path to your client certificate and key. If your certificate is bundled in one file, you can pass just that file.
+client_cert = ('/path/to/client_cert.pem', '/path/to/client_key.pem')
+
+# Optional: specify a CA bundle to verify the server certificate
+verify = '/path/to/ca_bundle.pem'
+
+# Optional: define your proxy settings
+proxies = {
+    "http": "http://your.proxy:port",
+    "https": "http://your.proxy:port"
+}
+
+# Send the GET request (adjust method and parameters as needed)
+response = requests.get(url, cert=client_cert, verify=verify, proxies=proxies)
+
+print(response.status_code)
+print(response.text)
