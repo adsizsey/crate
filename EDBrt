@@ -1,0 +1,71 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from collections import Counter
+from transformers import DistilBertTokenizerFast
+
+# Load dataset
+df = pd.read_csv("bert_data.csv")  # Replace with your actual file path
+
+# Basic summary
+print("Dataset shape:", df.shape)
+print("\nColumn names:", df.columns)
+print("\nFirst few rows:")
+print(df.head())
+
+# Number of unique intents
+unique_intents = df["intent"].nunique()
+print(f"\nNumber of unique intents: {unique_intents}")
+
+# Top and bottom 5 intents by frequency
+intent_counts = df['intent'].value_counts()
+print("\nTop 5 intents by frequency:")
+print(intent_counts.head())
+print("\nBottom 5 intents by frequency:")
+print(intent_counts.tail())
+
+# Plot class distribution
+plt.figure(figsize=(12, 5))
+sns.barplot(x=intent_counts.index, y=intent_counts.values)
+plt.xticks(rotation=90)
+plt.title("Intent Distribution")
+plt.xlabel("Intent")
+plt.ylabel("Frequency")
+plt.tight_layout()
+plt.show()
+
+# Utterance length in characters and words
+df["char_len"] = df["utterance"].apply(len)
+df["word_len"] = df["utterance"].apply(lambda x: len(x.split()))
+
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 2, 1)
+sns.histplot(df["char_len"], bins=30, kde=True)
+plt.title("Utterance Length (Characters)")
+plt.subplot(1, 2, 2)
+sns.histplot(df["word_len"], bins=30, kde=True)
+plt.title("Utterance Length (Words)")
+plt.tight_layout()
+plt.show()
+
+# Tokenization check
+tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+token_lens = df["utterance"].apply(lambda x: len(tokenizer(x, truncation=True, padding=False)["input_ids"]))
+
+plt.figure(figsize=(8, 4))
+sns.histplot(token_lens, bins=30, kde=True)
+plt.title("Utterance Length (in Tokens)")
+plt.xlabel("Token Count")
+plt.ylabel("Frequency")
+plt.show()
+
+# Check for long utterances that may be truncated (e.g., > 128 tokens)
+long_utterances = sum(token_lens > 128)
+print(f"\nNumber of utterances > 128 tokens: {long_utterances} ({long_utterances / len(df) * 100:.2f}%)")
+
+# Print a few examples of tokenization splits
+print("\nSample tokenization check:")
+for i in range(3):
+    print(f"Original: {df['utterance'].iloc[i]}")
+    print(f"Tokens: {tokenizer.tokenize(df['utterance'].iloc[i])}")
+    print("----")
