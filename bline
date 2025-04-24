@@ -1,19 +1,12 @@
-
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import LabelEncoder
 from sklearn.pipeline import make_pipeline
 import numpy as np
 
-# Assumes you have:
-# train_df: training data with columns ["Utterance", "Intent"]
-# test_df and other Lex-related datasets already in datasets dict
+# Encode target labels using label_to_ind_dict
+y_train = train_df["Intent"].map(label_to_ind_dict).values
 
-# Encode target labels
-label_encoder = LabelEncoder()
-y_train = label_encoder.fit_transform(train_df["Intent"])
-
-# Train TF-IDF + Logistic Regression baseline
+# Train pipeline
 pipeline = make_pipeline(
     TfidfVectorizer(ngram_range=(1, 2), max_features=10000),
     LogisticRegression(max_iter=1000, solver="lbfgs", multi_class="ovr")
@@ -21,16 +14,13 @@ pipeline = make_pipeline(
 
 pipeline.fit(train_df["Utterance"], y_train)
 
-# Store classes for reverse mapping
-baseline_classes = label_encoder.classes_
-
 # Predict on all datasets
 for name, df in datasets.items():
     X = df["Utterance"]
     probs = pipeline.predict_proba(X)
     preds = np.argmax(probs, axis=1)
-    
-    df["BaselinePrediction"] = label_encoder.inverse_transform(preds)
+
+    df["BaselinePrediction"] = [ind_to_label_dict[i] for i in preds]
     df["BaselineConfidence"] = probs.max(axis=1)
     
-    datasets[name] = df  # update in-place
+    datasets[name] = df
