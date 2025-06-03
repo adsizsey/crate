@@ -1,0 +1,15 @@
+import numpy as np
+from collections import defaultdict
+
+def compute_label_transition_matrix(dataset, num_labels):
+    matrix = np.zeros((num_labels, num_labels))
+    for example in dataset:
+        labels = example['labels']
+        for i in range(len(labels) - 1):
+            matrix[labels[i], labels[i+1]] += 1
+    matrix /= matrix.sum()
+    sparsity = np.mean(matrix == 0)
+    return matrix, sparsity
+
+matrix, sparsity = compute_label_transition_matrix(train_dataset, len(id_to_label))
+print(f"Transition matrix sparsity: {sparsity:.2f}")
