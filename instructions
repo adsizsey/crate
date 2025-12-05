@@ -1,0 +1,126 @@
+################################################################################
+# 0. CREATE DIRECTORIES
+################################################################################
+
+mkdir -p $HOME/nfs-storage-ny/py37_src
+mkdir -p $HOME/nfs-storage-ny/local
+mkdir -p $HOME/nfs-storage-ny/venvs
+
+
+################################################################################
+# 1. BUILD LIBFFI (required for Python _ctypes)
+################################################################################
+cd $HOME/nfs-storage-ny/py37_src
+tar xf libffi-3.4.4.tar.gz
+cd libffi-3.4.4
+
+./configure --prefix=$HOME/nfs-storage-ny/local/libffi
+make -j4
+make install
+
+# Verify:
+#   $HOME/nfs-storage-ny/local/libffi/include/ffi.h
+#   $HOME/nfs-storage-ny/local/libffi/lib   or lib64
+
+
+################################################################################
+# 2. BUILD LIBXML2 (required for lxml)
+################################################################################
+cd $HOME/nfs-storage-ny/py37_src
+tar xf libxml2-2.9.12.tar.gz
+cd libxml2-2.9.12
+
+./configure --prefix=$HOME/nfs-storage-ny/local/libxml2 --without-python
+make -j4
+make install
+
+# Verify:
+#   $HOME/nfs-storage-ny/local/libxml2/include/libxml2
+#   $HOME/nfs-storage-ny/local/libxml2/lib
+
+
+################################################################################
+# 3. BUILD LIBXSLT (also required for lxml)
+################################################################################
+cd $HOME/nfs-storage-ny/py37_src
+tar xf libxslt-1.1.34.tar.gz
+cd libxslt-1.1.34
+
+./configure \
+  --prefix=$HOME/nfs-storage-ny/local/libxslt \
+  --with-libxml-prefix=$HOME/nfs-storage-ny/local/libxml2
+
+make -j4
+make install
+
+# Verify:
+#   $HOME/nfs-storage-ny/local/libxslt/include
+#   $HOME/nfs-storage-ny/local/libxslt/lib
+
+
+################################################################################
+# 4. EXPORT ALL ENVIRONMENT VARIABLES AT ONCE
+################################################################################
+
+# ---- libffi (ctypes) ----
+export CPPFLAGS="-I$HOME/nfs-storage-ny/local/libffi/include"
+export LDFLAGS="-L$HOME/nfs-storage-ny/local/libffi/lib64"
+export PKG_CONFIG_PATH="$HOME/nfs-storage-ny/local/libffi/lib64/pkgconfig:$PKG_CONFIG_PATH"
+
+# ---- libxml2 + libxslt (lxml) ----
+export CPPFLAGS="$CPPFLAGS -I$HOME/nfs-storage-ny/local/libxml2/include/libxml2 -I$HOME/nfs-storage-ny/local/libxslt/include"
+export LDFLAGS="$LDFLAGS -L$HOME/nfs-storage-ny/local/libxml2/lib -L$HOME/nfs-storage-ny/local/libxslt/lib"
+
+# ---- runtime library loader path (recommended) ----
+export LD_LIBRARY_PATH="$HOME/nfs-storage-ny/local/libffi/lib64:$HOME/nfs-storage-ny/local/libxml2/lib:$HOME/nfs-storage-ny/local/libxslt/lib:$LD_LIBRARY_PATH"
+
+
+################################################################################
+# 5. BUILD PYTHON 3.7 USING LOCAL LIBFFI
+################################################################################
+cd $HOME/nfs-storage-ny/py37_src
+tar xf Python-3.7.*.tgz     # adjust filename
+cd Python-3.7*
+
+make clean || true
+
+./configure \
+  --prefix=$HOME/nfs-storage-ny/local/python-3.7 \
+  --with-ensurepip=install
+
+make -j4
+make install
+
+# Test that ctypes now works:
+$HOME/nfs-storage-ny/local/python-3.7/bin/python3.7 -c "import ctypes; print(ctypes.__file__)"
+
+
+################################################################################
+# 6. CREATE VENV & INSTALL REQUIREMENTS (INCLUDING lxml)
+################################################################################
+
+# Create venv:
+$HOME/nfs-storage-ny/local/python-3.7/bin/python3.7 \
+    -m venv $HOME/nfs-storage-ny/venvs/py37env
+
+# Activate:
+source $HOME/nfs-storage-ny/venvs/py37env/bin/activate
+
+# Ensure environment vars apply inside venv:
+export CPPFLAGS="$CPPFLAGS"
+export LDFLAGS="$LDFLAGS"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+
+# Optional: upgrade pip
+pip install --upgrade pip
+
+# Install lxml specifically:
+pip install lxml
+
+# Install entire requirements:
+pip install -r /path/to/requirements.txt
+
+
+################################################################################
+# DONE.
+################################################################################
