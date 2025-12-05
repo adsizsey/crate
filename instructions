@@ -1,126 +1,141 @@
 ################################################################################
-# 0. CREATE DIRECTORIES
+# CONFIG: base paths (ADJUST ONLY THESE IF NEEDED)
 ################################################################################
+BASE="$HOME/nfs-storage-ny"
+SRC="$BASE/py37_src"
+INSTALL="$BASE/local"
+VENV_DIR="$BASE/venvs"
+REQ_FILE="/path/to/requirements.txt"   # <-- CHANGE THIS to your real requirements.txt path
 
-mkdir -p $HOME/nfs-storage-ny/py37_src
-mkdir -p $HOME/nfs-storage-ny/local
-mkdir -p $HOME/nfs-storage-ny/venvs
+mkdir -p "$SRC" "$INSTALL" "$VENV_DIR"
 
 
 ################################################################################
-# 1. BUILD LIBFFI (required for Python _ctypes)
+# 1. BUILD LIBFFI (for Python _ctypes)  - you already did some of this, but safe
 ################################################################################
-cd $HOME/nfs-storage-ny/py37_src
+cd "$SRC"
+# Put your libffi tarball here first, e.g. libffi-3.4.4.tar.gz
+# If it's already extracted, you can skip the tar xf line.
 tar xf libffi-3.4.4.tar.gz
 cd libffi-3.4.4
 
-./configure --prefix=$HOME/nfs-storage-ny/local/libffi
+./configure --prefix="$INSTALL/libffi"
 make -j4
 make install
 
-# Verify:
-#   $HOME/nfs-storage-ny/local/libffi/include/ffi.h
-#   $HOME/nfs-storage-ny/local/libffi/lib   or lib64
+# You should now have:
+#   $INSTALL/libffi/include/ffi.h
+#   $INSTALL/libffi/lib64/libffi.so*  (on your system it's under lib64)
 
 
 ################################################################################
-# 2. BUILD LIBXML2 (required for lxml)
+# 2. BUILD LIBXML2 2.9.12 WITH CMAKE (for lxml)
 ################################################################################
-cd $HOME/nfs-storage-ny/py37_src
+cd "$SRC"
+# Put libxml2-2.9.12.tar.gz in $SRC first
 tar xf libxml2-2.9.12.tar.gz
 cd libxml2-2.9.12
 
-./configure --prefix=$HOME/nfs-storage-ny/local/libxml2 --without-python
+mkdir -p build
+cd build
+
+cmake \
+  -DCMAKE_INSTALL_PREFIX="$INSTALL/libxml2" \
+  -DLIBXML2_WITH_PYTHON=OFF \
+  ..
+
 make -j4
 make install
 
-# Verify:
-#   $HOME/nfs-storage-ny/local/libxml2/include/libxml2
-#   $HOME/nfs-storage-ny/local/libxml2/lib
+# You should now have:
+#   $INSTALL/libxml2/include/libxml2/...
+#   $INSTALL/libxml2/lib/libxml2.so*
 
 
 ################################################################################
-# 3. BUILD LIBXSLT (also required for lxml)
+# 3. BUILD LIBXSLT 1.1.34 (also for lxml)
 ################################################################################
-cd $HOME/nfs-storage-ny/py37_src
+cd "$SRC"
+# Put libxslt-1.1.34.tar.gz in $SRC first
 tar xf libxslt-1.1.34.tar.gz
 cd libxslt-1.1.34
 
 ./configure \
-  --prefix=$HOME/nfs-storage-ny/local/libxslt \
-  --with-libxml-prefix=$HOME/nfs-storage-ny/local/libxml2
+  --prefix="$INSTALL/libxslt" \
+  --with-libxml-prefix="$INSTALL/libxml2"
 
 make -j4
 make install
 
-# Verify:
-#   $HOME/nfs-storage-ny/local/libxslt/include
-#   $HOME/nfs-storage-ny/local/libxslt/lib
+# You should now have:
+#   $INSTALL/libxslt/include/...
+#   $INSTALL/libxslt/lib/libxslt.so*
 
 
 ################################################################################
-# 4. EXPORT ALL ENVIRONMENT VARIABLES AT ONCE
+# 4. EXPORT ALL ENV VARS (run this in EVERY NEW SHELL before building/using)
 ################################################################################
 
-# ---- libffi (ctypes) ----
-export CPPFLAGS="-I$HOME/nfs-storage-ny/local/libffi/include"
-export LDFLAGS="-L$HOME/nfs-storage-ny/local/libffi/lib64"
-export PKG_CONFIG_PATH="$HOME/nfs-storage-ny/local/libffi/lib64/pkgconfig:$PKG_CONFIG_PATH"
+# libffi for _ctypes
+export CPPFLAGS="-I$INSTALL/libffi/include"
+export LDFLAGS="-L$INSTALL/libffi/lib64"
+export PKG_CONFIG_PATH="$INSTALL/libffi/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
 
-# ---- libxml2 + libxslt (lxml) ----
-export CPPFLAGS="$CPPFLAGS -I$HOME/nfs-storage-ny/local/libxml2/include/libxml2 -I$HOME/nfs-storage-ny/local/libxslt/include"
-export LDFLAGS="$LDFLAGS -L$HOME/nfs-storage-ny/local/libxml2/lib -L$HOME/nfs-storage-ny/local/libxslt/lib"
+# add libxml2 + libxslt include/lib paths
+export CPPFLAGS="$CPPFLAGS -I$INSTALL/libxml2/include/libxml2 -I$INSTALL/libxslt/include"
+export LDFLAGS="$LDFLAGS -L$INSTALL/libxml2/lib -L$INSTALL/libxslt/lib"
 
-# ---- runtime library loader path (recommended) ----
-export LD_LIBRARY_PATH="$HOME/nfs-storage-ny/local/libffi/lib64:$HOME/nfs-storage-ny/local/libxml2/lib:$HOME/nfs-storage-ny/local/libxslt/lib:$LD_LIBRARY_PATH"
+# runtime loader paths
+export LD_LIBRARY_PATH="$INSTALL/libffi/lib64:$INSTALL/libxml2/lib:$INSTALL/libxslt/lib:${LD_LIBRARY_PATH:-}"
 
 
 ################################################################################
 # 5. BUILD PYTHON 3.7 USING LOCAL LIBFFI
 ################################################################################
-cd $HOME/nfs-storage-ny/py37_src
-tar xf Python-3.7.*.tgz     # adjust filename
+cd "$SRC"
+# Put Python-3.7.x.tgz here first
+tar xf Python-3.7.*.tgz
 cd Python-3.7*
 
 make clean || true
 
 ./configure \
-  --prefix=$HOME/nfs-storage-ny/local/python-3.7 \
+  --prefix="$INSTALL/python-3.7" \
   --with-ensurepip=install
 
 make -j4
 make install
 
-# Test that ctypes now works:
-$HOME/nfs-storage-ny/local/python-3.7/bin/python3.7 -c "import ctypes; print(ctypes.__file__)"
+# Test that ctypes works:
+"$INSTALL/python-3.7/bin/python3.7" -c "import ctypes; print('ctypes OK:', ctypes.__file__)"
 
 
 ################################################################################
-# 6. CREATE VENV & INSTALL REQUIREMENTS (INCLUDING lxml)
+# 6. CREATE VENV & INSTALL PACKAGES (including lxml)
 ################################################################################
 
-# Create venv:
-$HOME/nfs-storage-ny/local/python-3.7/bin/python3.7 \
-    -m venv $HOME/nfs-storage-ny/venvs/py37env
+# Create venv
+"$INSTALL/python-3.7/bin/python3.7" -m venv "$VENV_DIR/py37env"
 
-# Activate:
-source $HOME/nfs-storage-ny/venvs/py37env/bin/activate
+# Activate venv
+source "$VENV_DIR/py37env/bin/activate"
 
-# Ensure environment vars apply inside venv:
+# Reapply env vars inside venv (just to be safe)
 export CPPFLAGS="$CPPFLAGS"
 export LDFLAGS="$LDFLAGS"
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
 
-# Optional: upgrade pip
+# Optional: upgrade pip in this venv
 pip install --upgrade pip
 
-# Install lxml specifically:
+# First, check that lxml can build with your local libxml2/libxslt:
 pip install lxml
 
-# Install entire requirements:
-pip install -r /path/to/requirements.txt
+# Then install your full requirements
+pip install -r "$REQ_FILE"
 
-
+# When done
+# deactivate
 ################################################################################
-# DONE.
+# END
 ################################################################################
