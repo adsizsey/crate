@@ -1,68 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-###############################################################################
-# CONFIG: adjust these if needed
-###############################################################################
 BASE="$HOME/nfs-storage-ny"
 SRC="$BASE/py37_src"
 INSTALL="$BASE/local"
 VENV_DIR="$BASE/venvs"
 PY_PREFIX="$INSTALL/python-3.7"
 
-# *** CHANGE THIS to the actual path of your requirements.txt ***
-REQ_FILE="$SRC/requirements.txt"
+mkdir -p "$INSTALL" "$VENV_DIR"
 
-# Python tarball name (adjust version if needed)
-PY_TARBALL="Python-3.7.17.tgz"   # <-- change if your file name differs
-
-# CMake binary tarball name (precompiled)
-CMAKE_TARBALL="cmake-3.29.3-linux-x86_64.tar.gz"  # <-- adjust if different
-
-LIBFFI_TARBALL="libffi-3.4.4.tar.gz"
-LIBXML_TARBALL="libxml2-2.9.12.tar.gz"
-LIBXSLT_TARBALL="libxslt-1.1.34.tar.gz"
-
-mkdir -p "$SRC" "$INSTALL" "$VENV_DIR"
-
-echo "### BASE:      $BASE"
-echo "### SRC:       $SRC"
-echo "### INSTALL:   $INSTALL"
-echo "### VENV_DIR:  $VENV_DIR"
+echo "### Using existing source folders under $SRC"
 echo
 
 ###############################################################################
-# 0. CLEAN UP ANY OLD HALF-BUILT STUFF (SAFE)
+# 1. CLEAN ANY OLD BAD BUILDS INSIDE local (SAFE)
 ###############################################################################
-echo "==> Cleaning any old libxml2/libxslt build dirs (if present)..."
-rm -rf "$SRC/libxml2-2.9.12" || true
-rm -rf "$SRC/libxslt-1.1.34" || true
+echo "==> Cleaning old accidental CMake junk inside $INSTALL ..."
+cd "$INSTALL"
 
-# Don't touch libffi/python if they already exist; we're rebuilding anyway below.
+rm -f CMakeCache.txt cmake_install.cmake Makefile config.h 2>/dev/null || true
+rm -rf CMakeFiles 2>/dev/null || true
 
-###############################################################################
-# 1. SET UP CMAKE (precompiled 3.29.3)
-###############################################################################
-echo "==> Setting up CMake from $CMAKE_TARBALL ..."
-cd "$SRC"
-tar xf "$CMAKE_TARBALL"
-CMAKE_DIR=$(echo cmake-3.29.3-linux-x86_64*)
-cd "$CMAKE_DIR"
-
-export PATH="$PWD/bin:$PATH"
-echo "    CMake now in PATH: $(command -v cmake)"
-cmake --version || { echo 'CMake not working'; exit 1; }
+echo "   Cleaned."
 echo
 
 ###############################################################################
-# 2. BUILD libffi 3.4.4 (for Python _ctypes)
+# 2. REBUILD libffi FROM EXISTING FOLDER
 ###############################################################################
-echo "==> Building libffi from $LIBFFI_TARBALL ..."
-cd "$SRC"
-tar xf "$LIBFFI_TARBALL"
-cd libffi-3.4.4
+echo "==> Building libffi ..."
+cd "$SRC/libffi-3.4.4"
+make distclean 2>/dev/null || true
 
-# Use lib64 for libraries to match your earlier setup
 ./configure \
   --prefix="$INSTALL/libffi" \
   --libdir="$INSTALL/libffi/lib64"
@@ -70,22 +38,21 @@ cd libffi-3.4.4
 make -j4
 make install
 
-echo "    libffi headers: $INSTALL/libffi/include"
-echo "    libffi libs:    $INSTALL/libffi/lib64"
+echo "   libffi installed into $INSTALL/libffi"
 echo
 
 ###############################################################################
-# 3. BUILD libxml2 2.9.12 (with CMake, LZMA disabled)
+# 3. REBUILD libxml2 FROM EXISTING FOLDER (CMake)
 ###############################################################################
-echo "==> Building libxml2 from $LIBXML_TARBALL ..."
-cd "$SRC"
-tar xf "$LIBXML_TARBALL"
+echo "==> Building libxml2 ..."
+
 LIBXML_SRC="$SRC/libxml2-2.9.12"
-LIBXML_BUILD="$LIBXML_SRC/build"
 LIBXML_PREFIX="$INSTALL/libxml2"
 
-mkdir -p "$LIBXML_BUILD"
-cd "$LIBXML_BUILD"
+# Clean old build dir
+rm -rf "$LIBXML_SRC/build" || true
+mkdir -p "$LIBXML_SRC/build"
+cd "$LIBXML_SRC/build"
 
 cmake \
   -DCMAKE_INSTALL_PREFIX="$LIBXML_PREFIX" \
@@ -96,17 +63,19 @@ cmake \
 make -j4
 make install
 
-echo "    libxml2 include: $LIBXML_PREFIX/include/libxml2"
-echo "    libxml2 libs:    $LIBXML_PREFIX/lib"
+echo "   libxml2 installed into $LIBXML_PREFIX"
 echo
 
 ###############################################################################
-# 4. BUILD libxslt 1.1.34 (autotools, linked to our libxml2)
+# 4. REBUILD libxslt FROM EXISTING FOLDER
 ###############################################################################
-echo "==> Building libxslt from $LIBXSLT_TARBALL ..."
-cd "$SRC"
-tar xf "$LIBXSLT_TARBALL"
-cd libxslt-1.1.34
+echo "==> Building libxslt ..."
+
+LIBXSLT_SRC="$SRC/libxslt-1.1.34"
+rm -rf "$LIBXSLT_SRC/build" 2>/dev/null || true
+
+cd "$LIBXSLT_SRC"
+make distclean 2>/dev/null || true
 
 ./configure \
   --prefix="$INSTALL/libxslt" \
@@ -115,50 +84,42 @@ cd libxslt-1.1.34
 make -j4
 make install
 
-echo "    libxslt include: $INSTALL/libxslt/include"
-echo "    libxslt libs:    $INSTALL/libxslt/lib"
+echo "   libxslt installed into $INSTALL/libxslt"
 echo
 
 ###############################################################################
-# 5. EXPORT ENV VARS (libffi + libxml2 + libxslt)
-#    These are needed for building Python and C-extensions like lxml.
+# 5. EXPORT ALL ENVIRONMENT VARIABLES
 ###############################################################################
-echo "==> Exporting CPPFLAGS / LDFLAGS / PKG_CONFIG_PATH / LD_LIBRARY_PATH ..."
+echo "==> Setting environment variables ..."
 
-# Start from scratch for clarity
-unset CPPFLAGS || true
-unset LDFLAGS || true
-unset PKG_CONFIG_PATH || true
-unset LD_LIBRARY_PATH || true
+unset CPPFLAGS LDFLAGS PKG_CONFIG_PATH LD_LIBRARY_PATH || true
 
-# libffi (for Python _ctypes)
+# libffi
 export CPPFLAGS="-I$INSTALL/libffi/include"
 export LDFLAGS="-L$INSTALL/libffi/lib64"
 export PKG_CONFIG_PATH="$INSTALL/libffi/lib64/pkgconfig"
 
-# add libxml2 + libxslt
+# libxml2 + libxslt
 export CPPFLAGS="$CPPFLAGS -I$LIBXML_PREFIX/include/libxml2 -I$INSTALL/libxslt/include"
 export LDFLAGS="$LDFLAGS -L$LIBXML_PREFIX/lib -L$INSTALL/libxslt/lib"
 
-# runtime loader
+# shared libs
 export LD_LIBRARY_PATH="$INSTALL/libffi/lib64:$LIBXML_PREFIX/lib:$INSTALL/libxslt/lib"
 
-echo "    CPPFLAGS=$CPPFLAGS"
-echo "    LDFLAGS=$LDFLAGS"
-echo "    PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-echo "    LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+echo "   CPPFLAGS=$CPPFLAGS"
+echo "   LDFLAGS=$LDFLAGS"
+echo "   LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 echo
 
 ###############################################################################
-# 6. BUILD PYTHON 3.7 USING LOCAL libffi
+# 6. REBUILD PYTHON 3.7 FROM EXISTING FOLDER
 ###############################################################################
-echo "==> Building Python 3.7 from $PY_TARBALL ..."
-cd "$SRC"
-tar xf "$PY_TARBALL"
-PY_SRC_DIR=$(echo Python-3.7.* | head -n 1)
+echo "==> Building Python 3.7 ..."
+
+PY_SRC_DIR=$(echo "$SRC"/Python-3.7*)
 cd "$PY_SRC_DIR"
 
-make clean || true
+make distclean 2>/dev/null || true
 
 ./configure \
   --prefix="$PY_PREFIX" \
@@ -167,52 +128,29 @@ make clean || true
 make -j4
 make install
 
-echo "    Python binary: $PY_PREFIX/bin/python3.7"
 "$PY_PREFIX/bin/python3.7" -V
 "$PY_PREFIX/bin/python3.7" -c "import ctypes; print('ctypes OK:', ctypes.__file__)"
 echo
 
 ###############################################################################
-# 7. CREATE VENV & INSTALL lxml + requirements
+# 7. CREATE / ACTIVATE VENV & INSTALL LXML + REQUIREMENTS
 ###############################################################################
-echo "==> Creating venv under $VENV_DIR/py37env ..."
-VENV_PATH="$VENV_DIR/py37env"
+echo "==> Creating and using venv ..."
 
+VENV_PATH="$VENV_DIR/py37env"
 "$PY_PREFIX/bin/python3.7" -m venv "$VENV_PATH"
 
-echo "==> Activating venv ..."
-# shellcheck disable=SC1090
+# Activate venv
 source "$VENV_PATH/bin/activate"
 
-echo "    Python in venv: $(which python)"
-python -V
-
-# Re-export env vars inside venv (just to be explicit)
+# Reapply env vars inside venv
 export CPPFLAGS="$CPPFLAGS"
 export LDFLAGS="$LDFLAGS"
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
-export PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
 
-echo "==> Upgrading pip in venv ..."
 pip install --upgrade pip
-
-echo "==> Installing lxml (using local libxml2/libxslt)..."
 pip install lxml
 
-if [ -f "$REQ_FILE" ]; then
-    echo "==> Installing requirements from $REQ_FILE ..."
-    pip install -r "$REQ_FILE"
-else
-    echo "!! WARNING: REQ_FILE does not exist: $REQ_FILE"
-    echo "   Skipping requirements.txt installation."
-fi
-
-echo
-echo "###########################################################################"
-echo " ALL DONE."
-echo " Python 3.7:  $PY_PREFIX/bin/python3.7"
-echo " Venv:        $VENV_PATH"
-echo " To use later in a new shell:"
-echo "   1) source $0"
-echo "   2) source $VENV_PATH/bin/activate"
-echo "###########################################################################"
+echo "=== DONE ==="
+echo "Python: $PY_PREFIX/bin/python3.7"
+echo "Venv:   $VENV_PATH"
